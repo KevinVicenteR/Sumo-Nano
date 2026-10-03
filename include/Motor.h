@@ -7,8 +7,11 @@
 class Motor {
     int pinA1, pinA2, pinPWM;
     bool invertido;
+    int compensacion;
+    int ajustar(int velocidad) const;
 public:
-    Motor(int a1, int a2, int pwm, bool invertir = false);
+    Motor(int a1, int a2, int pwm, bool invertir = false, int compensacionPct = 100);
+    void iniciar();
     void avanzar(int velocidad);
     void retroceder(int velocidad);
     void detener();
@@ -18,6 +21,7 @@ class Motores {
     Motor motorIzq, motorDer;
 public:
     Motores();
+    void iniciar();
     void adelante(int velocidad);
     void retroceder(int velocidad);
     void detener();
@@ -25,8 +29,6 @@ public:
     void izquierda(int velocidad);
     void curvaDerecha(int velocidad);
     void curvaIzquierda(int velocidad);
-    Motor& getIzquierdo();
-    Motor& getDerecho();
 };
 
 #endif

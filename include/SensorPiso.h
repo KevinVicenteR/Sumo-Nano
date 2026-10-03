@@ -10,6 +10,8 @@ class SensorPiso : public ISensor {
     int umbral;
 public:
     SensorPiso(int pin, int umbral);
+    int leerValor();
+    bool esBlanco(int valor) const;
     bool detectar() override;
 };
 

@@ -1,27 +1,40 @@
-
-    // Variables estáticas para la rutina de búsqueda
-    static bool busquedaDerecha = true;
-    static unsigned char faseBusqueda = 0;
-    static unsigned long inicioFase = 0;
 #include <Arduino.h>
-#include <avr/wdt.h>
 #include "Robot.h"
 #include "Definiciones.h"
 
-// ------------------ Control remoto (nivel) ------------------
-bool robot_encendido          = false;
-
 Robot::Robot() :
     motores(),
-    sensorPisoIzq(SENSOR_DE_PISO_IZQUIERDO, BLANCO),
-    sensorPisoDer(SENSOR_DE_PISO_DERECHO, BLANCO),
-    sensorFrontal(SENSOR_FRONTAL_CENTRA),
-    sensorFrontalIzq(SENSOR_FRONTAL_IZQUIERDO),
-    sensorFrontalDer(SENSOR_FRONTAL_DERECHO),
-    sensorLateralIzq(SENSOR_LATERAL_IZQUIERDO),
-    sensorLateralDer(SENSOR_LATERAL_DERECHO),
-    bordeDetectado(false)
+    sensorPisoIzq(S_PISO_IZQ, BLANCO),
+    sensorPisoDer(S_PISO_DER, BLANCO),
+    sensorFrontal(S_FRONT_CEN),
+    sensorFrontalIzq(S_FRONT_IZQ),
+    sensorFrontalDer(S_FRONT_DER),
+    sensorLateralIzq(S_LAT_IZQ),
+    sensorLateralDer(S_LAT_DER),
+    bordeDetectado(false),
+    estadoAnterior(false),
+    busquedaDerecha(true),
+    faseBusqueda(0),
+    inicioFase(0),
+    huboContacto(false),
+    ultimoContacto(0),
+    remotoEstable(false),
+    remotoCambioDesde(0)
 {}
+
+// Lee el control remoto con filtro de ruido
+bool Robot::leerRemoto() {
+    const int nivel = digitalRead(Pin_Control_Remoto);
+    const bool crudo = REMOTE_ACTIVE_HIGH ? (nivel == HIGH) : (nivel == LOW);
+    const unsigned long ahora = millis();
+    if (crudo == remotoEstable) {
+        remotoCambioDesde = ahora;
+    } else if (ahora - remotoCambioDesde >= REMOTO_FILTRO_MS) {
+        remotoEstable = crudo;
+        remotoCambioDesde = ahora;
+    }
+    return remotoEstable;
+}
 
 bool Robot::leerPiso(bool &pisoIzq, bool &pisoDer) {
     pisoIzq = sensorPisoIzq.detectar();
@@ -29,116 +42,67 @@ bool Robot::leerPiso(bool &pisoIzq, bool &pisoDer) {
     return pisoIzq || pisoDer;
 }
 
-bool Robot::esperarConPrioridadPiso(unsigned long duracionMs) {
-    unsigned long inicio = millis();
+void Robot::reiniciarEstado() {
+    bordeDetectado = false;
+    busquedaDerecha = true;
+    faseBusqueda = 0;
+    inicioFase = 0;
+    huboContacto = false;
+    ultimoContacto = 0;
+}
+
+// Retrocede durante un tiempo fijo
+bool Robot::retrocesoSeguro(unsigned long duracionMs) {
+    const unsigned long inicio = millis();
     while (millis() - inicio < duracionMs) {
+        if (!leerRemoto()) {
+            motores.detener();
+            return false;
+        }
+        retroceder();
+    }
+    return true;
+}
+
+// Gira sobre su eje para alejarse del borde
+bool Robot::giroEscape(bool haciaDerecha, unsigned long duracionMs) {
+    const unsigned long inicio = millis();
+    while (millis() - inicio < duracionMs) {
+        if (!leerRemoto()) {
+            motores.detener();
+            return false;
+        }
         bool pisoIzq = false;
         bool pisoDer = false;
         if (leerPiso(pisoIzq, pisoDer)) {
-            
             return true;
         }
-        delay(5);
+        girarHacia(haciaDerecha);
     }
-    return false;
+    return true;
 }
 
-void Robot::retrocesoSeguro(unsigned long duracionMs) {
-    unsigned long inicio = millis();
-    unsigned long pistaEstableDesde = 0;
-    const unsigned long retrocesoMinimoMs = 30;
-    while (millis() - inicio < duracionMs) {
-        retroceder();
-
-        bool pisoIzq = false;
-        bool pisoDer = false;
-        bool enBorde = leerPiso(pisoIzq, pisoDer);
-
-        if (!enBorde) {
-            if (pistaEstableDesde == 0) {
-                pistaEstableDesde = millis();
-            }
-            if ((millis() - inicio) > retrocesoMinimoMs && (millis() - pistaEstableDesde) > 25) {
-                return;
-            }
-        } else {
-            pistaEstableDesde = 0;
-        }
-    }
-}
-
-void Robot::giroEscapeSeguro(bool haciaDerecha, unsigned long duracionMs) {
-    unsigned long inicio = millis();
-    unsigned long pistaEstableDesde = 0;
-    while (millis() - inicio < duracionMs) {
-        bool pisoIzq = false;
-        bool pisoDer = false;
-        bool enBorde = leerPiso(pisoIzq, pisoDer);
-
-        if (haciaDerecha) {
-            moverDerecha();
-        } else {
-            moverIzquierda();
-        }
-
-        // Requiere una pequeña ventana estable fuera del borde para terminar el giro.
-        if (!enBorde) {
-            if (pistaEstableDesde == 0) {
-                pistaEstableDesde = millis();
-            }
-            if ((millis() - inicio) > 30 && (millis() - pistaEstableDesde) > 30) {
-                return;
-            }
-        } else {
-            pistaEstableDesde = 0;
-        }
-    }
-}
-
-void Robot::giroEscapeCompleto(bool haciaDerecha, unsigned long duracionMs) {
-    unsigned long inicio = millis();
-    unsigned long pistaEstableDesde = 0;
-    const unsigned long giroMinimoMs = 60;
-    while (millis() - inicio < duracionMs) {
-        bool pisoIzq = false;
-        bool pisoDer = false;
-        bool enBorde = leerPiso(pisoIzq, pisoDer);
-
-        if (haciaDerecha) {
-            moverDerecha();
-        } else {
-            moverIzquierda();
-        }
-
-        if (!enBorde) {
-            if (pistaEstableDesde == 0) {
-                pistaEstableDesde = millis();
-            }
-            if ((millis() - inicio) > giroMinimoMs && (millis() - pistaEstableDesde) > 45) {
-                return;
-            }
-        } else {
-            pistaEstableDesde = 0;
-        }
+void Robot::girarHacia(bool haciaDerecha) {
+    if (haciaDerecha) {
+        moverDerecha();
+    } else {
+        moverIzquierda();
     }
 }
 
 void Robot::setup() {
-    Serial.begin(9600);
-    pinMode(SENSOR_DE_PISO_IZQUIERDO, INPUT);
-    pinMode(SENSOR_DE_PISO_DERECHO, INPUT);
-    pinMode(SENSOR_FRONTAL_DERECHO, INPUT);
-    pinMode(SENSOR_FRONTAL_CENTRA, INPUT);
-    pinMode(SENSOR_FRONTAL_IZQUIERDO, INPUT);
-    pinMode(SENSOR_LATERAL_IZQUIERDO, INPUT);
-    pinMode(SENSOR_LATERAL_DERECHO, INPUT);
-    pinMode(MA2A, OUTPUT);
-    pinMode(MA1A, OUTPUT);
-    pinMode(PWMA, OUTPUT);
-    pinMode(MA2B, OUTPUT);
-    pinMode(MA1B, OUTPUT);
-    pinMode(PWMB, OUTPUT);
+    pinMode(S_PISO_IZQ, INPUT);
+    pinMode(S_PISO_DER, INPUT);
+    pinMode(S_FRONT_DER, INPUT);
+    pinMode(S_FRONT_CEN, INPUT);
+    pinMode(S_FRONT_IZQ, INPUT);
+    pinMode(S_LAT_IZQ, INPUT);
+    pinMode(S_LAT_DER, INPUT);
     pinMode(Pin_Control_Remoto, INPUT);
+    motores.iniciar();
+#if MODO_CALIBRACION
+    Serial.begin(9600);
+#endif
 }
 
 void Robot::detenerse() {
@@ -168,236 +132,180 @@ void Robot::moverIzquierda() {
 void Robot::sensoresPiso(bool pisoIzq, bool pisoDer) {
     static bool giroAlternadoDerecha = true;
 
+    if (!retrocesoSeguro(TIEMPO_RETROCESO_MS)) return;
+
     if (pisoIzq && pisoDer) {
-        retrocesoSeguro(100);
-        giroEscapeSeguro(giroAlternadoDerecha, 90);
+        giroEscape(giroAlternadoDerecha, TIEMPO_GIRO_BORDE_FRENTE_MS);
         giroAlternadoDerecha = !giroAlternadoDerecha;
     } else if (pisoDer) {
-        retrocesoSeguro(120);
-        giroEscapeCompleto(false, 120);
+        giroEscape(false, TIEMPO_GIRO_BORDE_LADO_MS);
     } else if (pisoIzq) {
-        retrocesoSeguro(120);
-        giroEscapeCompleto(true, 120);
+        giroEscape(true, TIEMPO_GIRO_BORDE_LADO_MS);
     }
 }
 
-void Robot::sensoresFrontales(bool central, bool derecho, bool izquierdo) {
-    // Aquí solo llega si es frontal asimétrico (no central), así que ataca hacia ese lado
-      
+// Gira hacia el enemigo detectado por un sensor frontal lateral
+void Robot::sensoresFrontales(bool derecho, bool izquierdo) {
     if (derecho && !izquierdo) {
         moverDerecha();
-        if (esperarConPrioridadPiso(70)) return;
-        motores.adelante(Velocidad_maxima);
-        esperarConPrioridadPiso(70);
     } else if (izquierdo && !derecho) {
         moverIzquierda();
-        if (esperarConPrioridadPiso(70)) return;
-        motores.adelante(Velocidad_maxima);
-        esperarConPrioridadPiso(70);
     }
 }
 
+// Gira hacia el enemigo detectado por un sensor lateral
 void Robot::sensoresLaterales(bool sensorIzquierdo, bool sensorDerecho) {
-    if (sensorIzquierdo && sensorDerecho) return;
-
-    bool pisoIzq = false, pisoDer = false;
-    leerPiso(pisoIzq, pisoDer);
-    if (pisoIzq || pisoDer) return;
-
-    // Posicionamiento rápido: solo una llanta gira y la otra queda detenida.
-    // Verifica piso cada 5ms para abortar si hay borde.
-    if (sensorIzquierdo) {
-        motores.getIzquierdo().detener();
-        motores.getDerecho().avanzar(Velocidad_maxima_Ataque);
-        esperarConPrioridadPiso(80);
+    if (sensorIzquierdo && sensorDerecho) {
+        girarHacia(busquedaDerecha);
+    } else if (sensorIzquierdo) {
+        moverIzquierda();
     } else if (sensorDerecho) {
-        motores.getDerecho().detener();
-        motores.getIzquierdo().avanzar(Velocidad_maxima_Ataque);
-        esperarConPrioridadPiso(80);
+        moverDerecha();
     }
 }
+
+#if MODO_CALIBRACION
+// Muestra las lecturas de los sensores por Serial
+void Robot::calibrar() {
+    static unsigned long ultimoEnvio = 0;
+    motores.detener();
+    if (millis() - ultimoEnvio < 100) return;
+    ultimoEnvio = millis();
+
+    Serial.print(F("Piso I:"));
+    Serial.print(sensorPisoIzq.leerValor());
+    Serial.print(F(" D:"));
+    Serial.print(sensorPisoDer.leerValor());
+    Serial.print(F(" | Frontal I:"));
+    Serial.print(sensorFrontalIzq.detectar());
+    Serial.print(F(" C:"));
+    Serial.print(sensorFrontal.detectar());
+    Serial.print(F(" D:"));
+    Serial.print(sensorFrontalDer.detectar());
+    Serial.print(F(" | Lateral I:"));
+    Serial.print(sensorLateralIzq.detectar());
+    Serial.print(F(" D:"));
+    Serial.print(sensorLateralDer.detectar());
+    Serial.print(F(" | Remoto:"));
+    Serial.println(leerRemoto() ? F("START") : F("STOP"));
+}
+#endif
 
 void Robot::loop() {
-    // ------------------ Control remoto ------------------
-    int estado_actual = digitalRead(Pin_Control_Remoto);
-    bool nivel_activo = REMOTE_ACTIVE_HIGH ? (estado_actual == HIGH) : (estado_actual == LOW);
-    robot_encendido = nivel_activo;
+#if MODO_CALIBRACION
+    calibrar();
+    return;
+#endif
 
-    static bool estadoAnterior = false;
-    if (!robot_encendido) {
+    // Control remoto
+    if (!leerRemoto()) {
         motores.detener();
         estadoAnterior = false;
         return;
     }
-    const bool recienEncendido = !estadoAnterior;
-    estadoAnterior = true;
-
-    // LECTURA DE SENSORES
-    bool PisoIzq = false, PisoDer = false;
-    int valorPisoIzq = analogRead(SENSOR_DE_PISO_IZQUIERDO);
-    int valorPisoDer = analogRead(SENSOR_DE_PISO_DERECHO);
-    PisoIzq = (valorPisoIzq <= BLANCO);
-    PisoDer = (valorPisoDer <= BLANCO);
-    
-    bool FrontalDer = sensorFrontalDer.detectar();
-    bool FrontalIzq = sensorFrontalIzq.detectar();
-    bool FrontalCentral = sensorFrontal.detectar();
-    bool LateralDer = sensorLateralDer.detectar();
-    bool LateralIzq = sensorLateralIzq.detectar();
-    const bool enemigoDetectado = FrontalDer || FrontalIzq || FrontalCentral || LateralDer || LateralIzq;
-
-
-    // --- NUEVA LÓGICA: avanzar hasta detectar borde antes de rutina normal ---
-
-    // El estado ahora es miembro y se inicializa en setup()
-
-    // Si el robot está apagado (botón stop), resetea el estado
-    if (!robot_encendido) {
-        motores.detener();
-        bordeDetectado = false;
-        busquedaDerecha = true;
-        faseBusqueda = 0;
-        inicioFase = 0;
-        estadoAnterior = false;
-#include <avr/wdt.h>
-        wdt_enable(WDTO_15MS); // Habilita el watchdog para reinicio rápido
-        while (1) {} // Espera el reinicio
-        return;
+    if (!estadoAnterior) {
+        reiniciarEstado();
+        estadoAnterior = true;
     }
 
-    if (!bordeDetectado) {
-        // Avanza hacia el borde a velocidad reducida
-        motores.adelante(Velocidad_borde);
-        if (PisoIzq || PisoDer) {
-            // Al detectar el borde, retrocede para no salirse
-            bordeDetectado = true;
-            retrocesoSeguro(120); // Ajustado para motores de 700 rpm
-            sensoresPiso(PisoIzq, PisoDer);
+    // Lectura de sensores
+    const int valorPisoIzq = sensorPisoIzq.leerValor();
+    const int valorPisoDer = sensorPisoDer.leerValor();
+    const bool PisoIzq = sensorPisoIzq.esBlanco(valorPisoIzq);
+    const bool PisoDer = sensorPisoDer.esBlanco(valorPisoDer);
+
+    const bool FrontalDer = sensorFrontalDer.detectar();
+    const bool FrontalIzq = sensorFrontalIzq.detectar();
+    const bool FrontalCentral = sensorFrontal.detectar();
+    const bool LateralDer = sensorLateralDer.detectar();
+    const bool LateralIzq = sensorLateralIzq.detectar();
+
+    const unsigned long ahora = millis();
+    if (FrontalDer || FrontalIzq || FrontalCentral || LateralDer || LateralIzq) {
+        huboContacto = true;
+        ultimoContacto = ahora;
+        // Último lado donde se vio al enemigo
+        const bool vistoDer = FrontalDer || LateralDer;
+        const bool vistoIzq = FrontalIzq || LateralIzq;
+        if (vistoDer != vistoIzq) {
+            busquedaDerecha = vistoDer;
         }
-        return;
     }
 
-    // SISTEMA DE PRIORIDADES
-    // Prioridad 0 (MÁXIMA): Escape del borde
+    // Escape del borde
     if (PisoIzq || PisoDer) {
+        bordeDetectado = true;
         sensoresPiso(PisoIzq, PisoDer);
         return;
     }
 
-    // Prioridad 1 (ALTA): Enemigo frontal
+    // Ataque frontal
     if (FrontalCentral || (FrontalDer && FrontalIzq)) {
         ataqueEnemigo();
         return;
     }
 
-    // Prioridad 1B: Frontal asimétrico
+    // Enemigo en frontal izquierdo o derecho
     if (FrontalDer || FrontalIzq) {
-        sensoresFrontales(false, FrontalDer, FrontalIzq);
+        sensoresFrontales(FrontalDer, FrontalIzq);
         return;
     }
 
-    // Prioridad 2 (MEDIA): Enemigo lateral (solo después de detectar el borde)
+    // Avance inicial hasta encontrar el borde
+    if (!bordeDetectado) {
+        motores.adelante(Velocidad_borde);
+        return;
+    }
+
+    // Enemigo lateral
     if (LateralDer || LateralIzq) {
         sensoresLaterales(LateralIzq, LateralDer);
         return;
     }
 
-    static unsigned long ultimoContacto = 0;
-    if (enemigoDetectado) {
-        ultimoContacto = millis();
-    }
+    // Búsqueda
+    const bool cercaBordeIzq = valorPisoIzq <= (BLANCO + MARGEN_CERCA_BORDE);
+    const bool cercaBordeDer = valorPisoDer <= (BLANCO + MARGEN_CERCA_BORDE);
 
-    // Prioridad 3 (BAJA): Búsqueda sin enemigo
-    // Patrón: barrido de arco ~180° + paso corto, cubre trasero, laterales y frente.
-    //   Fase 0: giro ~180° hacia busquedaDerecha       (~350 ms)
-    //   Fase 1: avance corto hacia el interior          ( ~80 ms)
-    //   Fase 2: giro ~180° en dirección contraria       (~350 ms)
-    //   Fase 3: avance corto hacia el interior          ( ~80 ms)
-    // Al completar el ciclo alterna la dirección inicial para no repetir el mismo patrón.
-    static bool busquedaDerecha = true;
-    static uint8_t faseBusqueda = 0;
-    static unsigned long inicioFase = 0;
-
-    if (recienEncendido) {
-        faseBusqueda = 0;
-        inicioFase = 0;
-    }
-
-    const unsigned long ahora = millis();
-    const unsigned long tiempoSinContacto = ahora - ultimoContacto;
-    const int margenSeguridadPiso = 35;
-    const bool cercaBordeIzq = valorPisoIzq <= (BLANCO + margenSeguridadPiso);
-    const bool cercaBordeDer = valorPisoDer <= (BLANCO + margenSeguridadPiso);
-
-    // Si acaba de perder contacto, gira de inmediato para re-encontrar al enemigo.
-    // No avanza: si el enemigo está detrás, avanzar lo alejaría.
-    if (tiempoSinContacto < 130) {
-        if (cercaBordeIzq || cercaBordeDer) {
-            if (cercaBordeIzq && !cercaBordeDer) {
-                moverDerecha();
-            } else if (cercaBordeDer && !cercaBordeIzq) {
-                moverIzquierda();
-            } else if (busquedaDerecha) {
-                moverDerecha();
-            } else {
-                moverIzquierda();
-            }
-        } else {
-            // Gira en lugar de avanzar: cubre el ángulo trasero cuanto antes
-            if (busquedaDerecha) moverDerecha(); else moverIzquierda();
-        }
-        faseBusqueda = 0;
-        inicioFase = ahora;
-        return;
-    }
-
-    if (inicioFase == 0) {
-        inicioFase = ahora;
-    }
-
-    // Duraciones de cada fase del barrido 360° (2 arcos de ~180° con avance entre medias)
-    const unsigned long duraciones[4] = {200, 60, 200, 60};
-
-    if ((ahora - inicioFase) >= duraciones[faseBusqueda]) {
-        inicioFase = ahora;
-        faseBusqueda = (faseBusqueda + 1) % 4;
-        // Al completar las 4 fases (vuelta completa), invierte dirección inicial
-        if (faseBusqueda == 0) {
-            busquedaDerecha = !busquedaDerecha;
-        }
-    }
-
-    // Si hay borde cerca durante la búsqueda, re-centrar antes de seguir girando.
+    // Se aleja del borde cercano
     if (cercaBordeIzq || cercaBordeDer) {
         if (cercaBordeIzq && !cercaBordeDer) {
             moverDerecha();
         } else if (cercaBordeDer && !cercaBordeIzq) {
             moverIzquierda();
-        } else if (busquedaDerecha) {
-            moverDerecha();
         } else {
-            moverIzquierda();
+            girarHacia(busquedaDerecha);
         }
         faseBusqueda = 0;
         inicioFase = ahora;
         return;
     }
 
-    // Fase 0: primer arco ~180°
-    if (faseBusqueda == 0) {
-        if (busquedaDerecha) moverDerecha(); else moverIzquierda();
+    // Gira hacia el último lado donde se vio al enemigo
+    if (huboContacto && (ahora - ultimoContacto) < TIEMPO_REBUSQUEDA_MS) {
+        girarHacia(busquedaDerecha);
+        faseBusqueda = 0;
+        inicioFase = ahora;
+        return;
     }
-    // Fase 1: avance hacia el centro
-    else if (faseBusqueda == 1) {
-        motores.adelante(Velocidad_maxima);
+
+    // Patrón de búsqueda: giro, avance, giro, avance
+    const unsigned long duraciones[4] = {
+        TIEMPO_BUSQUEDA_GIRO_MS, TIEMPO_BUSQUEDA_AVANCE_MS,
+        TIEMPO_BUSQUEDA_GIRO_MS, TIEMPO_BUSQUEDA_AVANCE_MS
+    };
+
+    if (inicioFase == 0) {
+        inicioFase = ahora;
     }
-    // Fase 2: segundo arco ~180° en sentido contrario (completa los 360°)
-    else if (faseBusqueda == 2) {
-        if (busquedaDerecha) moverIzquierda(); else moverDerecha();
+    if ((ahora - inicioFase) >= duraciones[faseBusqueda]) {
+        inicioFase = ahora;
+        faseBusqueda = (faseBusqueda + 1) % 4;
     }
-    // Fase 3: avance hacia el centro
-    else {
+
+    if (faseBusqueda == 0 || faseBusqueda == 2) {
+        girarHacia(busquedaDerecha);
+    } else {
         motores.adelante(Velocidad_maxima);
     }
 }
-

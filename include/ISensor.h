@@ -3,6 +3,7 @@
 
 class ISensor {
 public:
+    virtual ~ISensor() {}
     virtual bool detectar() = 0;
 };
 

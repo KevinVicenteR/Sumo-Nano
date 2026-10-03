@@ -2,56 +2,51 @@
 #include "Definiciones.h"
 
 namespace {
-void setLedsMovimiento(bool txOn, bool rxOn) {
-#if defined(TXLED0) && defined(TXLED1) && defined(RXLED0) && defined(RXLED1)
-    if (txOn) {
-        TXLED0;
-    } else {
-        TXLED1;
-    }
+enum class PatronLed {
+    APAGADO,
+    AVANCE,
+    RETROCESO,
+    GIRO_DER,
+    GIRO_IZQ
+};
 
-    if (rxOn) {
-        RXLED0;
-    } else {
-        RXLED1;
+void setLedMovimiento(PatronLed patron) {
+    unsigned long periodo = 0;
+    switch (patron) {
+        case PatronLed::APAGADO:
+            digitalWrite(LED_BUILTIN, LOW);
+            return;
+        case PatronLed::AVANCE:
+            digitalWrite(LED_BUILTIN, HIGH);
+            return;
+        case PatronLed::RETROCESO: periodo = 260; break;
+        case PatronLed::GIRO_DER:  periodo = 120; break;
+        case PatronLed::GIRO_IZQ:  periodo = 50;  break;
     }
-#else
-    static bool ledInicializado = false;
-    if (!ledInicializado) {
-        pinMode(LED_BUILTIN, OUTPUT);
-        ledInicializado = true;
-    }
-
-    // En placas con un solo LED (Nano), usa patrones para distinguir estados.
-    if (!txOn && !rxOn) {
-        digitalWrite(LED_BUILTIN, LOW);
-        return;
-    }
-
-    const unsigned long ahora = millis();
-    if (txOn && rxOn) {
-        // Giro: parpadeo rapido
-        digitalWrite(LED_BUILTIN, ((ahora / 120) % 2) ? HIGH : LOW);
-    } else if (txOn) {
-        // Avance: fijo encendido
-        digitalWrite(LED_BUILTIN, HIGH);
-    } else {
-        // Retroceso/curva izquierda: parpadeo lento
-        digitalWrite(LED_BUILTIN, ((ahora / 260) % 2) ? HIGH : LOW);
-    }
-#endif
+    digitalWrite(LED_BUILTIN, ((millis() / periodo) % 2) ? HIGH : LOW);
 }
 } // namespace
 
-Motor::Motor(int a1, int a2, int pwm, bool invertir)
-    : pinA1(a1), pinA2(a2), pinPWM(pwm), invertido(invertir) {}
+Motor::Motor(int a1, int a2, int pwm, bool invertir, int compensacionPct)
+    : pinA1(a1), pinA2(a2), pinPWM(pwm), invertido(invertir), compensacion(compensacionPct) {}
+
+void Motor::iniciar() {
+    pinMode(pinA1, OUTPUT);
+    pinMode(pinA2, OUTPUT);
+    pinMode(pinPWM, OUTPUT);
+    detener();
+}
+
+int Motor::ajustar(int velocidad) const {
+    return constrain((long)velocidad * compensacion / 100, 0, 255);
+}
 
 void Motor::avanzar(int velocidad) {
     const uint8_t pin1 = invertido ? HIGH : LOW;
     const uint8_t pin2 = invertido ? LOW : HIGH;
     digitalWrite(pinA1, pin1);
     digitalWrite(pinA2, pin2);
-    analogWrite(pinPWM, velocidad);
+    analogWrite(pinPWM, ajustar(velocidad));
 }
 
 void Motor::retroceder(int velocidad) {
@@ -59,66 +54,70 @@ void Motor::retroceder(int velocidad) {
     const uint8_t pin2 = invertido ? HIGH : LOW;
     digitalWrite(pinA1, pin1);
     digitalWrite(pinA2, pin2);
-    analogWrite(pinPWM, velocidad);
+    analogWrite(pinPWM, ajustar(velocidad));
 }
 
 void Motor::detener() {
+#if FRENO_ACTIVO
+    digitalWrite(pinA1, HIGH);
+    digitalWrite(pinA2, HIGH);
+    analogWrite(pinPWM, 255);
+#else
     digitalWrite(pinA1, LOW);
     digitalWrite(pinA2, LOW);
     analogWrite(pinPWM, 0);
+#endif
 }
 
-// Implementación de Motores
+// Motores
 Motores::Motores() :
-    motorIzq(MA1A, MA2A, PWMA, INVERTIR_MOTOR_IZQUIERDO),
-    motorDer(MA1B, MA2B, PWMB, INVERTIR_MOTOR_DERECHO) {}
+    motorIzq(MA1A, MA2A, PWMA, INVERTIR_MOTOR_IZQUIERDO, COMPENSACION_MOTOR_IZQ),
+    motorDer(MA1B, MA2B, PWMB, INVERTIR_MOTOR_DERECHO, COMPENSACION_MOTOR_DER) {}
+
+void Motores::iniciar() {
+    pinMode(LED_BUILTIN, OUTPUT);
+    motorIzq.iniciar();
+    motorDer.iniciar();
+}
 
 void Motores::adelante(int velocidad) {
     motorIzq.avanzar(velocidad);
     motorDer.avanzar(velocidad);
-    setLedsMovimiento(true, false);
+    setLedMovimiento(PatronLed::AVANCE);
 }
 
 void Motores::retroceder(int velocidad) {
     motorIzq.retroceder(velocidad);
     motorDer.retroceder(velocidad);
-    setLedsMovimiento(false, true);
+    setLedMovimiento(PatronLed::RETROCESO);
 }
 
 void Motores::detener() {
     motorIzq.detener();
     motorDer.detener();
-    setLedsMovimiento(false, false);
+    setLedMovimiento(PatronLed::APAGADO);
 }
 
 void Motores::derecha(int velocidad) {
     motorIzq.avanzar(velocidad);
     motorDer.retroceder(velocidad);
-    setLedsMovimiento(true, true);
+    setLedMovimiento(PatronLed::GIRO_DER);
 }
 
 void Motores::izquierda(int velocidad) {
     motorIzq.retroceder(velocidad);
     motorDer.avanzar(velocidad);
-    setLedsMovimiento(false, true);
+    setLedMovimiento(PatronLed::GIRO_IZQ);
 }
 
 void Motores::curvaDerecha(int velocidad) {
     motorIzq.avanzar(velocidad);
     motorDer.detener();
-    setLedsMovimiento(true, false);
+    setLedMovimiento(PatronLed::GIRO_DER);
 }
 
 void Motores::curvaIzquierda(int velocidad) {
     motorIzq.detener();
     motorDer.avanzar(velocidad);
-    setLedsMovimiento(false, true);
-}
-
-Motor& Motores::getIzquierdo() {
-    return motorIzq;
-}
-
-Motor& Motores::getDerecho() {
-    return motorDer;
+    setLedMovimiento(PatronLed::GIRO_IZQ);
 }
