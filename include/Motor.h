@@ -23,6 +23,7 @@ public:
     Motores();
     void iniciar();
     void adelante(int velocidad);
+    void diferencial(int velocidadIzq, int velocidadDer);
     void retroceder(int velocidad);
     void detener();
     void derecha(int velocidad);

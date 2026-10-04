@@ -26,15 +26,12 @@ Robot::Robot() :
     inicioFase(0),
     huboContacto(false),
     ultimoContacto(0),
-    ultimoContactoFrontal(false),
     seguimientoActivo(false),
     giroSeguimientoDerecha(true),
     inicioSeguimiento(0),
     ultimoCambioGiro(0),
     desatascoActivo(false),
     inicioDesatasco(0),
-    ataqueActivo(false),
-    inicioAtaque(0),
     remotoEstable(false),
     remotoCambioDesde(0)
 {}
@@ -66,11 +63,9 @@ void Robot::reiniciarEstado() {
     inicioFase = 0;
     huboContacto = false;
     ultimoContacto = 0;
-    ultimoContactoFrontal = false;
     ultimoCambioGiro = 0;
     seguimientoActivo = false;
     desatascoActivo = false;
-    ataqueActivo = false;
 }
 
 // Retrocede hasta retirar los sensores del blanco, con límite de tiempo.
@@ -159,8 +154,14 @@ void Robot::detenerse() {
 }
 
 void Robot::ataqueEnemigo() {
-    // Ataque continuo. Blanco y STOP se revisan en el siguiente ciclo,
-    // sin esperas ni frenadas periódicas entre detecciones centrales.
+    // Potencia máxima por impulsos, con pausas para reducir la inercia.
+    // No bloquea: el siguiente loop vuelve a atender blanco y STOP.
+    const unsigned long periodo = ATAQUE_IMPULSO_MS + ATAQUE_PAUSA_MS;
+    if (ATAQUE_PAUSA_MS > 0 && millis() % periodo >= ATAQUE_IMPULSO_MS) {
+        motores.detener();
+        ESTADO_SIM(9);
+        return;
+    }
     ESTADO_SIM(4);
     motores.adelante(Velocidad_maxima_Ataque);
 }
@@ -189,7 +190,7 @@ void Robot::sensoresPiso(bool pisoIzq, bool pisoDer) {
     // hacia el exterior cuando se detecta blanco durante una orientación.
     if (!pausaEscape(PAUSA_ESCAPE_MS)) return;
     if (!retrocesoSeguro(TIEMPO_RETROCESO_MS)) return;
-    if (!pausaEscape(PAUSA_RETROCESO_MS)) return;
+    if (!pausaEscape(PAUSA_ESCAPE_MS)) return;
 
     if (pisoIzq && pisoDer) {
         giroEscape(giroAlternadoDerecha, TIEMPO_GIRO_BORDE_FRENTE_MS);
@@ -199,12 +200,11 @@ void Robot::sensoresPiso(bool pisoIzq, bool pisoDer) {
     } else if (pisoIzq) {
         giroEscape(true, TIEMPO_GIRO_BORDE_LADO_MS);
     }
-    pausaEscape(PAUSA_GIRO_MS);
+    pausaEscape(PAUSA_ESCAPE_MS);
 }
 
 // Mantiene una decisión breve para evitar alternar izquierda/derecha con ruido.
-// Reposiciona solo lecturas laterales o ambiguas persistentes; un frontal
-// inequívoco mantiene la persecución y no se interrumpe por un temporizador.
+// Tras un giro demasiado largo cambia de posición con un avance corto.
 void Robot::seguirDireccion(bool haciaDerecha, bool ambiguo, bool frontal) {
     const unsigned long ahora = millis();
     if (!seguimientoActivo) {
@@ -219,7 +219,7 @@ void Robot::seguirDireccion(bool haciaDerecha, bool ambiguo, bool frontal) {
         giroSeguimientoDerecha = haciaDerecha;
         ultimoCambioGiro = ahora;
     }
-    if ((!frontal || ambiguo) && ahora - inicioSeguimiento >= GIRO_MAX_SEGUIMIENTO_MS) {
+    if (ahora - inicioSeguimiento >= GIRO_MAX_SEGUIMIENTO_MS) {
         desatascoActivo = true;
         inicioDesatasco = ahora;
         seguimientoActivo = false;
@@ -305,7 +305,6 @@ void Robot::loop() {
     if (FrontalDer || FrontalIzq || FrontalCentral || LateralDer || LateralIzq) {
         huboContacto = true;
         ultimoContacto = ahora;
-        ultimoContactoFrontal = FrontalDer || FrontalIzq || FrontalCentral;
         // Último lado donde se vio al enemigo
         const bool vistoDer = FrontalDer || LateralDer;
         const bool vistoIzq = FrontalIzq || LateralIzq;
@@ -316,7 +315,6 @@ void Robot::loop() {
 
     // Escape del borde
     if (PisoIzq || PisoDer) {
-        ataqueActivo = false;
         bordeDetectado = true;
         seguimientoActivo = false;
         desatascoActivo = false;
@@ -326,23 +324,11 @@ void Robot::loop() {
 
     // Ataque frontal
     if (FrontalCentral || (ATAQUE_DOBLE_FRONTAL && FrontalDer && FrontalIzq && !LateralDer && !LateralIzq)) {
+        seguimientoActivo = false;
         desatascoActivo = false;
-        if (FrontalDer != FrontalIzq) {
-            // El central confirma ataque, pero el frontal lateral permite
-            // centrar al rival sin detenerse ni esperar a perderlo de vista.
-            seguirDireccion(FrontalDer, false, true);
-            ESTADO_SIM(4);
-            if (giroSeguimientoDerecha) motores.diferencial(Velocidad_maxima_Ataque, VELOCIDAD_ATAQUE_CURVA_INTERIOR);
-            else motores.diferencial(VELOCIDAD_ATAQUE_CURVA_INTERIOR, Velocidad_maxima_Ataque);
-        } else {
-            seguimientoActivo = false;
-            ataqueEnemigo();
-        }
+        ataqueEnemigo();
         return;
     }
-    ataqueActivo = false;
-
-    if (FrontalDer != FrontalIzq) desatascoActivo = false;
 
     // Avance breve de desbloqueo. Se relee el borde en cada loop y el central
     // puede interrumpirlo para atacar; no añade otra espera bloqueante.
@@ -367,6 +353,8 @@ void Robot::loop() {
         return;
     }
 
+    seguimientoActivo = false;
+
     // Búsqueda
     const bool cercaBordeIzq = PISO_BLANCO_LOW
         ? valorPisoIzq <= (BLANCO + MARGEN_CERCA_BORDE)
@@ -377,7 +365,6 @@ void Robot::loop() {
 
     // Se aleja del borde cercano
     if (cercaBordeIzq || cercaBordeDer) {
-        seguimientoActivo = false;
         ESTADO_SIM(1);
         if (cercaBordeIzq && !cercaBordeDer) {
             moverDerecha();
@@ -393,13 +380,11 @@ void Robot::loop() {
 
     // Gira hacia el último lado donde se vio al enemigo
     if (huboContacto && (ahora - ultimoContacto) < TIEMPO_REBUSQUEDA_MS) {
-        seguirDireccion(busquedaDerecha, false, ultimoContactoFrontal);
+        seguirDireccion(busquedaDerecha, false, false);
         faseBusqueda = 0;
         inicioFase = ahora;
         return;
     }
-
-    seguimientoActivo = false;
 
     // Patrón de búsqueda: giro, avance, giro, avance
     const unsigned long duraciones[4] = {

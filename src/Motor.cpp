@@ -121,3 +121,14 @@ void Motores::curvaIzquierda(int velocidad) {
     motorDer.avanzar(velocidad);
     setLedMovimiento(PatronLed::GIRO_IZQ);
 }
+
+// Permite avanzar orientándose hacia un frontal sin girar siempre en el sitio.
+void Motores::diferencial(int velocidadIzq, int velocidadDer) {
+    if (velocidadIzq == 0) motorIzq.detener();
+    else if (velocidadIzq < 0) motorIzq.retroceder(-velocidadIzq);
+    else motorIzq.avanzar(velocidadIzq);
+    if (velocidadDer == 0) motorDer.detener();
+    else if (velocidadDer < 0) motorDer.retroceder(-velocidadDer);
+    else motorDer.avanzar(velocidadDer);
+    setLedMovimiento(velocidadIzq >= velocidadDer ? PatronLed::GIRO_DER : PatronLed::GIRO_IZQ);
+}

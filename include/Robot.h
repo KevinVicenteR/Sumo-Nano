@@ -20,6 +20,15 @@ class Robot {
     unsigned long inicioFase;
     bool huboContacto;
     unsigned long ultimoContacto;
+    bool ultimoContactoFrontal;
+    bool seguimientoActivo;
+    bool giroSeguimientoDerecha;
+    unsigned long inicioSeguimiento;
+    unsigned long ultimoCambioGiro;
+    bool desatascoActivo;
+    unsigned long inicioDesatasco;
+    bool ataqueActivo;
+    unsigned long inicioAtaque;
 
     // Filtro del control remoto
     bool remotoEstable;
@@ -29,8 +38,10 @@ class Robot {
     bool leerPiso(bool &pisoIzq, bool &pisoDer);
     void reiniciarEstado();
     bool retrocesoSeguro(unsigned long duracionMs);
+    bool pausaEscape(unsigned long duracionMs);
     bool giroEscape(bool haciaDerecha, unsigned long duracionMs);
     void girarHacia(bool haciaDerecha);
+    void seguirDireccion(bool haciaDerecha, bool ambiguo, bool frontal);
 #if MODO_CALIBRACION
     void calibrar();
 #endif
