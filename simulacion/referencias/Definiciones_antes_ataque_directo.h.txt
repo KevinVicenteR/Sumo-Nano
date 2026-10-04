@@ -87,8 +87,7 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 // Opciones del controlador anterior, conservadas para comparaciones.
 // SEGUIMIENTO_PIVOTE=false conserva la alternativa de seguimiento en curva.
 // Las lecturas laterales simultáneas pueden pertenecer a objetos distintos.
-#define ATAQUE_DOBLE_FRONTAL true
-#define DOBLE_FRONTAL_CONFIRMACION_MS 4
+#define ATAQUE_DOBLE_FRONTAL false
 #define SEGUIMIENTO_PIVOTE true
 #define GIRO_COMPROMISO_MS 90
 #define GIRO_MAX_SEGUIMIENTO_MS 150

@@ -55,85 +55,54 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define PISO_NEGRO_TOLERANCIA_ADC 80
 
 // Velocidades (PWM 0-255)
-#define Velocidad_movimiento_seguir 255
-#define Velocidad_estandar 255 // Retroceso
+#define Velocidad_movimiento_seguir 190
+#define Velocidad_estandar 190 // Retroceso
 #define Velocidad_normal 255
-#define Velocidad_maxima 255 // Giros y búsqueda
-#define Velocidad_maxima_Ataque 255 // Ataque agresivo a plena potencia
+#define Velocidad_maxima 190 // Giros y búsqueda
+#define Velocidad_maxima_Ataque 190 // Límite validado con predicción del borde
 #define Velocidad_borde 255 // Avance inicial hacia el borde
 
-// Parámetros históricos: usados al comparar snapshots del controlador anterior.
-// El controlador actual utiliza ESCAPE_* y no introduce pausas.
-#define TIEMPO_RETROCESO_MS        60
-#define PAUSA_ESCAPE_MS           180
+// Tiempos de escape del borde
+#define TIEMPO_RETROCESO_MS        240
+#define PAUSA_ESCAPE_MS           100
 #define PAUSA_RETROCESO_MS        80
 #define PAUSA_GIRO_MS             80
-#define RETROCESO_MIN_MS          20
-#define PISO_LIBRE_MS             80
+#define RETROCESO_MIN_MS          150
+#define PISO_LIBRE_MS             20
 #define ATAQUE_IMPULSO_MS         90
 #define ATAQUE_PAUSA_MS           0
-#define TIEMPO_GIRO_BORDE_FRENTE_MS 450
-#define TIEMPO_GIRO_BORDE_LADO_MS   450
+#define TIEMPO_GIRO_BORDE_FRENTE_MS 150
+#define TIEMPO_GIRO_BORDE_LADO_MS   200
 
 // Patrones: 0=giro y avance, 1=zigzag, 2=arcos y avance.
-#define PATRON_BUSQUEDA 0
-#define VELOCIDAD_BUSQUEDA 255
+#define PATRON_BUSQUEDA 1
+#define VELOCIDAD_BUSQUEDA 190
 #define BUSQUEDA_FLUIDA true
 #define RAMPA_AVANCE_PWM_MS 4
 #define MEMORIA_ATAQUE_MS 60
 
 // Ataque continuo sin pausas; los tiempos de impulso solo sirven al comparar
 // snapshots anteriores en el simulador.
-// Opciones del controlador anterior, conservadas para comparaciones.
-// SEGUIMIENTO_PIVOTE=false conserva la alternativa de seguimiento en curva.
+// Seguimiento en curva: ambas ruedas avanzan; limita giros laterales ambiguos.
 // Las lecturas laterales simultáneas pueden pertenecer a objetos distintos.
-#define ATAQUE_DOBLE_FRONTAL true
-#define DOBLE_FRONTAL_CONFIRMACION_MS 4
-#define SEGUIMIENTO_PIVOTE true
+#define ATAQUE_DOBLE_FRONTAL false
 #define GIRO_COMPROMISO_MS 90
 #define GIRO_MAX_SEGUIMIENTO_MS 150
 #define DESATASCO_AVANCE_MS 40
-#define VELOCIDAD_DESATASCO 255
-#define VELOCIDAD_GIRO_ESCAPE 255
-#define VELOCIDAD_ORIENTACION 255
-#define FRENO_ORIENTACION_MS 180
+#define VELOCIDAD_DESATASCO 190
+#define VELOCIDAD_GIRO_ESCAPE 190
 
-// FRENO_LATERAL_MS es histórico; el lateral actual responde sin frenar.
-#define FRENO_LATERAL_MS 180
+// Frenado y orientación ante una detección lateral inequívoca.
+#define FRENO_LATERAL_MS 40
 #define GIRO_LATERAL_MAX_MS 220
-#define VELOCIDAD_GIRO_LATERAL 255
+#define VELOCIDAD_GIRO_LATERAL 190
 
-#define VELOCIDAD_CURVA_INTERIOR 26
-#define VELOCIDAD_ATAQUE_CURVA_INTERIOR 30
+#define VELOCIDAD_CURVA_INTERIOR 89
+#define VELOCIDAD_ATAQUE_CURVA_INTERIOR 104
 
 // Tiempos de búsqueda
 #define TIEMPO_BUSQUEDA_GIRO_MS    40
 #define TIEMPO_BUSQUEDA_AVANCE_MS  80
 #define TIEMPO_REBUSQUEDA_MS       150
-
-// Control agresivo: PWM 255 en ambos motores, corrección temporal con PID.
-#define MOTORES_MAXIMO_SIEMPRE true
-#define PID_DIRECCION_KP 200.0f
-#define PID_DIRECCION_KI 20.0f
-#define PID_DIRECCION_KD 3.0f
-#define PID_INTEGRAL_LIMITE 0.8f
-#define PID_DERIVADA_TAU_S 0.03f
-#define PID_PERIODO_MS 4
-#define PID_ZONA_MUERTA 8
-#define DIRECCION_PERIODO_MS 12
-#define PID_ERROR_CENTRAL_LATERAL 0.20f
-#define FILTRO_KALMAN_DIRECCION true
-#define KALMAN_DIRECCION_Q 25.0f
-#define KALMAN_R_CENTRAL 0.05f
-#define KALMAN_R_FRONTAL 0.12f
-#define KALMAN_R_LATERAL 0.35f
-#define ESCAPE_RETROCESO_MIN_MS 80
-#define ESCAPE_RETROCESO_MAX_MS 100
-#define ESCAPE_GIRO_MS 200
-#define BORDE_REPETIDO_VENTANA_MS 900
-#define BORDE_REPETIDO_GIRO_MIN_MS 200
-#define BUSQUEDA_CICLO_MS 220
-#define BUSQUEDA_ARCO_MS 200
-#define BUSQUEDA_CORRECCION_PWM 380
 
 #endif // DEFINICIONES_H

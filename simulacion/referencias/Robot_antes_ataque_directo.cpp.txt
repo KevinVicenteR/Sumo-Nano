@@ -15,7 +15,7 @@ Robot::Robot() : motores(), sensorPisoIzq(S_PISO_IZQ, BLANCO), sensorPisoDer(S_P
     pisoPrevioIzq(0), pisoPrevioDer(0), negroIzq(0), negroDer(0), pisoPrevioValido(false),
     negroIzqValido(false), negroDerValido(false), ultimaMuestraPiso(0), huboContacto(false),
     busquedaDerecha(true), centralReciente(false), ultimoContacto(0), ultimoCentral(0),
-    ultimaMedida(0), inicioLateral(0), inicioBusqueda(0), lateralActivo(false), dobleFrontalActivo(false), inicioDobleFrontal(0), faseBusqueda(0) {}
+    ultimaMedida(0), inicioLateral(0), inicioBusqueda(0), lateralActivo(false), faseBusqueda(0) {}
 
 void Robot::setup() {
     const uint8_t sensores[] = {S_PISO_IZQ,S_PISO_DER,S_FRONT_DER,S_FRONT_CEN,S_FRONT_IZQ,S_LAT_IZQ,S_LAT_DER};
@@ -41,7 +41,6 @@ void Robot::reiniciarEstado() {
     escapePrevio = reorientacionObligatoria = false;
     pisoPrevioValido = negroIzqValido = negroDerValido = false;
     huboContacto = centralReciente = lateralActivo = pisoLibreEstable = false;
-    dobleFrontalActivo = false;
     faseBusqueda = 0;
     inicioBusqueda = millis();
 }
@@ -88,7 +87,7 @@ void Robot::iniciarEscape(bool izquierda, bool derecha, unsigned long ahora) {
         giroEscapeDerecha = giroAlternadoDerecha;
         giroAlternadoDerecha = !giroAlternadoDerecha;
     } else giroEscapeDerecha = izquierda;
-    centralReciente = lateralActivo = dobleFrontalActivo = false;
+    centralReciente = lateralActivo = false;
     direccion.reiniciar();
 }
 
@@ -153,7 +152,7 @@ void Robot::seguirMedida(float medida, float ruido, unsigned long ahora, int est
     ESTADO_SIM(estado);
 }
 
-void Robot::ataqueEnemigo() { direccion.reiniciar(); motores.adelante(255); ESTADO_SIM(4); }
+void Robot::ataqueEnemigo() { motores.adelante(255); ESTADO_SIM(4); }
 void Robot::moverAdelante() { motores.adelante(255); }
 void Robot::retroceder() { motores.retroceder(255); ESTADO_SIM(5); }
 void Robot::moverDerecha() { motores.derecha(255); }
@@ -165,10 +164,7 @@ void Robot::sensoresFrontales(bool derecho, bool izquierdo) {
     seguirMedida(derecho == izquierdo ? 0 : derecho ? 0.8f : -0.8f, KALMAN_R_FRONTAL, millis(), 3);
 }
 void Robot::sensoresLaterales(bool izquierdo, bool derecho) {
-    // Un lateral necesita orientación; mezclar avance aquí describe una órbita.
-    if (izquierdo == derecho ? busquedaDerecha : derecho) moverDerecha();
-    else moverIzquierda();
-    ESTADO_SIM(11);
+    seguirMedida(izquierdo == derecho ? (busquedaDerecha ? 2.0f : -2.0f) : derecho ? 2.0f : -2.0f, KALMAN_R_LATERAL, millis(), 11);
 }
 
 #if MODO_CALIBRACION
@@ -181,11 +177,7 @@ void Robot::calibrar() {
     Serial.print(F(" D:")); Serial.print(sensorPisoDer.leerValor());
     Serial.print(F(" | Frente I/C/D:")); Serial.print(sensorFrontalIzq.detectar());
     Serial.print(sensorFrontal.detectar()); Serial.print(sensorFrontalDer.detectar());
-    Serial.print(F(" | Laterales I/D:")); Serial.print(sensorLateralIzq.detectar()); Serial.print(sensorLateralDer.detectar());
-    Serial.print(F(" | RAW FI/FC/FD/LI/LD:"));
-    const uint8_t pines[] = {S_FRONT_IZQ,S_FRONT_CEN,S_FRONT_DER,S_LAT_IZQ,S_LAT_DER};
-    for (uint8_t i = 0; i < 5; ++i) Serial.print(digitalRead(pines[i]));
-    Serial.println();
+    Serial.print(F(" | Laterales I/D:")); Serial.print(sensorLateralIzq.detectar()); Serial.println(sensorLateralDer.detectar());
 }
 #endif
 
@@ -221,19 +213,11 @@ void Robot::loop() {
         if (frenteDer || lateralDer) busquedaDerecha = true;
         if (frenteIzq || lateralIzq) busquedaDerecha = false;
     }
-    // Evitar confirmar ambos frontales por leerlos a lados de una transición.
-    if (!(frenteIzq && frenteDer)) dobleFrontalActivo = false;
-    else if (!dobleFrontalActivo) { dobleFrontalActivo = true; inicioDobleFrontal = ahora; }
-    const bool frenteConfirmado = central || (ATAQUE_DOBLE_FRONTAL && dobleFrontalActivo &&
-        ahora - inicioDobleFrontal >= DOBLE_FRONTAL_CONFIRMACION_MS);
-    const bool memoriaRecta = centralReciente && ahora - ultimoCentral < MEMORIA_ATAQUE_MS &&
-        !frenteIzq && !frenteDer && !lateralIzq && !lateralDer;
-    if (frenteConfirmado || memoriaRecta) {
+    if (central || (centralReciente && ahora - ultimoCentral < MEMORIA_ATAQUE_MS && !lateralIzq && !lateralDer)) {
         lateralActivo = false;
-        if (frenteConfirmado) { centralReciente = true; ultimoCentral = ahora; }
-        ultimaMedida = 0;
-        // El objetivo confirmado tiene prioridad sobre el estado previo del filtro.
-        ataqueEnemigo();
+        const float medida = frenteDer == frenteIzq ? 0 : frenteDer ? PID_ERROR_CENTRAL_LATERAL : -PID_ERROR_CENTRAL_LATERAL;
+        ultimaMedida = medida;
+        seguirMedida(medida,KALMAN_R_CENTRAL,ahora,4);
         return;
     }
     if (frenteIzq || frenteDer) {
@@ -246,7 +230,7 @@ void Robot::loop() {
         if (!lateralActivo) { lateralActivo = true; inicioLateral = ahora; }
         if (ahora - inicioLateral < GIRO_LATERAL_MAX_MS) {
             ultimaMedida = lateralDer == lateralIzq ? (busquedaDerecha ? 2.0f : -2.0f) : lateralDer ? 2.0f : -2.0f;
-            sensoresLaterales(lateralIzq,lateralDer);
+            seguirMedida(ultimaMedida,KALMAN_R_LATERAL,ahora,11);
         } else {
             // Salida breve sin freno para una lectura lateral persistente.
             moverAdelante(); ESTADO_SIM(7);
@@ -259,8 +243,7 @@ void Robot::loop() {
     }
     lateralActivo = false;
     if (huboContacto && ahora - ultimoContacto < TIEMPO_REBUSQUEDA_MS) {
-        if (fabsf(ultimaMedida) > 1) sensoresLaterales(ultimaMedida < 0,ultimaMedida > 0);
-        else seguirMedida(ultimaMedida,KALMAN_R_FRONTAL,ahora,3);
+        seguirMedida(ultimaMedida,KALMAN_R_LATERAL,ahora,3);
         return;
     }
     const unsigned long fase = (ahora - inicioBusqueda) % BUSQUEDA_CICLO_MS;

@@ -47,6 +47,7 @@ struct SerialSim {
     void begin(unsigned long) {}
     template <typename T> void print(T) {}
     template <typename T> void println(T) {}
+    void println() {}
 };
 extern SerialSim Serial;
 

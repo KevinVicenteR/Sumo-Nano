@@ -13,6 +13,8 @@ BASE=['--rpm','750','--masa','0.3','--dur','30']
 ENTORNOS={
  'objetos': ('Varios objetos alrededor del dojo','Objetos exteriores a 50 cm del centro; pueden activar varios sensores a la vez.', ['--inicio','borde','--pared','0.5']),
  'alternante': ('Lecturas alternantes · prueba sintética','Frontal izquierdo/derecho alterna cada 10 ms. Estrés de oscilación, no un enemigo físico.', ['--inicio','todo','--sensor-prueba','alternante']),
+ 'lateral_izquierdo': ('Lateral izquierdo · prueba sintética','Señal lateral izquierda persistente; el disco naranja no genera la señal.', ['--inicio','todo','--sensor-prueba','lateral-izquierdo']),
+ 'lateral_derecho': ('Lateral derecho · prueba sintética','Señal lateral derecha persistente; el disco naranja no genera la señal.', ['--inicio','todo','--sensor-prueba','lateral-derecho']),
  'laterales': ('Dos laterales activos · prueba sintética','Ambos laterales detectan continuamente sin frontal central. Estrés de bloqueo.', ['--inicio','todo','--sensor-prueba','laterales']),
  'todo': ('Todo el dojo · arranques aleatorios','Todo el cuerpo dentro del círculo; orientación aleatoria. También se permiten sensores sobre blanco.', ['--inicio','todo']),
  'malla': ('Malla · 384 posiciones y orientaciones','4 radios × 12 sectores × 8 orientaciones. La última corona queda a 1–2 mm del límite donde cabe el cuerpo.', ['--inicio','malla']),
@@ -29,7 +31,7 @@ ANTERIOR={'PATRON_BUSQUEDA':'0','VELOCIDAD_BUSQUEDA':'130','Velocidad_maxima':'1
 def parametros(params):
     import re
     texto=(simular.RAIZ/'include'/'Definiciones.h').read_text()
-    return {k:int(params.get(k,re.search(r'^#define\s+'+k+r'\s+(\d+)',texto,re.M)[1])) for k in ['PATRON_BUSQUEDA','Velocidad_maxima_Ataque','VELOCIDAD_BUSQUEDA','TIEMPO_RETROCESO_MS','Velocidad_estandar','Velocidad_maxima','TIEMPO_BUSQUEDA_AVANCE_MS','TIEMPO_BUSQUEDA_GIRO_MS','ATAQUE_IMPULSO_MS','ATAQUE_PAUSA_MS','PAUSA_ESCAPE_MS','RETROCESO_MIN_MS','GIRO_MAX_SEGUIMIENTO_MS','DESATASCO_AVANCE_MS','VELOCIDAD_CURVA_INTERIOR','VELOCIDAD_ATAQUE_CURVA_INTERIOR','VELOCIDAD_GIRO_ESCAPE','TIEMPO_GIRO_BORDE_FRENTE_MS','TIEMPO_GIRO_BORDE_LADO_MS','PAUSA_RETROCESO_MS','PAUSA_GIRO_MS']}
+    return {k:int(params.get(k,re.search(r'^#define\s+'+k+r'\s+(\d+)',texto,re.M)[1])) for k in ['PATRON_BUSQUEDA','Velocidad_maxima_Ataque','VELOCIDAD_BUSQUEDA','TIEMPO_RETROCESO_MS','Velocidad_estandar','Velocidad_maxima','TIEMPO_BUSQUEDA_AVANCE_MS','TIEMPO_BUSQUEDA_GIRO_MS','ATAQUE_IMPULSO_MS','ATAQUE_PAUSA_MS','PAUSA_ESCAPE_MS','RETROCESO_MIN_MS','GIRO_MAX_SEGUIMIENTO_MS','DESATASCO_AVANCE_MS','VELOCIDAD_CURVA_INTERIOR','VELOCIDAD_ATAQUE_CURVA_INTERIOR','VELOCIDAD_GIRO_ESCAPE','FRENO_LATERAL_MS','GIRO_LATERAL_MAX_MS','VELOCIDAD_GIRO_LATERAL','TIEMPO_GIRO_BORDE_FRENTE_MS','TIEMPO_GIRO_BORDE_LADO_MS','PAUSA_RETROCESO_MS','PAUSA_GIRO_MS']}
 
 def guardar(b,identificador,nombre,descripcion,env,extra,n,params, carpeta_base=None,fuente_robot=None):
     carpeta=(carpeta_base or RAIZ/'resultados'/'arranque'/'lotes')/identificador
@@ -37,7 +39,7 @@ def guardar(b,identificador,nombre,descripcion,env,extra,n,params, carpeta_base=
     meta={'nombre':nombre,'descripcion':descripcion,'entorno':env,'opciones':extra,'parametros':parametros(params),'version':'reloj-integrado-v2'}
     if carpeta_base:
         anterior=identificador.startswith('antes_')
-        meta['version']='anterior-lento-snapshot' if anterior else 'ataque-continuo-curva-v7'
+        meta['version']='anterior-lento-snapshot' if anterior else 'freno-giro-lateral-v9'
         meta['freno_activo']=False if anterior else '#define FRENO_ACTIVO true' in (simular.RAIZ/'include'/'Definiciones.h').read_text()
         meta['fuentes_sha256']={} if anterior else {str(p):hashlib.sha256((simular.RAIZ/p).read_bytes()).hexdigest() for p in map(Path,['src/Robot.cpp','include/Definiciones.h','src/Motor.cpp','simulacion/sim.cpp'])}
         if anterior:meta['robot_snapshot']='../../Robot_anterior.cpp.txt'

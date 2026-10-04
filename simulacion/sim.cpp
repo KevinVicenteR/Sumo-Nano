@@ -64,6 +64,7 @@ struct Config {
     std::string inicio = "todo"; // todo, borde, centro, fijo
     double inicioX = 0, inicioY = 0, inicioTh = 0;
     std::string pruebaSensores = "normal"; // alternante y laterales: estrés sintético
+    std::string pruebaPiso = "normal";
     double rangoEnemigo = 0.40;   // m, alcance de los sensores de enemigo
     // Enemigo
     double radioEnemigo = 0.05;   // m
@@ -71,6 +72,7 @@ struct Config {
     // Simulación
     double duracion = 30.0;       // s de combate (tras los 5 s reglamentarios)
     double ruidoPiso = 15.0;      // desviación estándar del ADC
+    double stopMs = -1;          // STOP sintético, desactivado por defecto
     double sobrecostoLoopUs = 20; // µs de loop() además de las lecturas
 };
 
@@ -183,11 +185,36 @@ bool rayoVe(double rx, double ry, double ang) {
 }
 
 bool sensorEnemigo(uint8_t pin) {
+    if (cfg.pruebaSensores == "central-intermitente")
+        return pin == S_FRONT_CEN && (static_cast<unsigned long>(tiempoUs / 20000) % 3) < 2;
+    if (cfg.pruebaSensores == "frontales-dobles")
+        return pin == S_FRONT_IZQ || pin == S_FRONT_DER;
+    if (cfg.pruebaSensores == "frontal-a-central")
+        return pin == (tiempoUs < 100000 ? S_FRONT_DER : S_FRONT_CEN);
+    if (cfg.pruebaSensores == "central-a-frontal")
+        return pin == (tiempoUs < 100000 ? S_FRONT_CEN : S_FRONT_IZQ);
+    if (cfg.pruebaSensores == "central-y-lateral")
+        return pin == S_FRONT_CEN || pin == S_LAT_DER;
+    if (cfg.pruebaSensores == "central-curva")
+        return pin == S_FRONT_CEN || (pin == S_FRONT_DER && tiempoUs >= 60000 && tiempoUs < 120000);
     if (cfg.pruebaSensores == "alternante") {
         const bool derecha = ((unsigned long)(tiempoUs / 10000) % 2) == 0;
         return pin == (derecha ? S_FRONT_DER : S_FRONT_IZQ);
     }
     if (cfg.pruebaSensores == "laterales") return pin == S_LAT_DER || pin == S_LAT_IZQ;
+    if (cfg.pruebaSensores == "lateral-izquierdo") return pin == S_LAT_IZQ;
+    if (cfg.pruebaSensores == "lateral-derecho") return pin == S_LAT_DER;
+    if (cfg.pruebaSensores == "lateral-a-frontal")
+        return pin == (tiempoUs < 100000 ? S_LAT_DER : S_FRONT_CEN);
+    // Aparición del rival en cada fase del escape desde el borde.
+    if (cfg.pruebaSensores == "escape-frontal-retroceso")
+        return pin == S_FRONT_CEN;
+    if (cfg.pruebaSensores == "escape-frontal-pausa-retroceso")
+        return tiempoUs >= 260000 && pin == S_FRONT_CEN;
+    if (cfg.pruebaSensores == "escape-frontal-giro")
+        return tiempoUs >= 360000 && pin == S_FRONT_CEN;
+    if (cfg.pruebaSensores == "escape-frontal-pausa-giro")
+        return tiempoUs >= 800000 && pin == S_FRONT_CEN;
 
     const double fx = cfg.largo / 2, ly = cfg.ancho / 2;
     if (pin == S_FRONT_CEN) return rayoVe(fx, 0, 0);
@@ -497,6 +524,20 @@ unsigned long micros(void) { avanzarTiempo(4); return (unsigned long)tiempoUs; }
 
 int analogRead(uint8_t pin) {
     avanzarTiempo(112);  // conversión ADC con prescaler 128 a 16 MHz
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "escape-repetido")
+        return (int)(((tiempoUs < 50000) || (tiempoUs >= 200000 && tiempoUs < 250000)) ? cfg.adcBlanco : cfg.adcNegro);
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "escape")
+        return (int)(tiempoUs < 200000 ? cfg.adcBlanco : cfg.adcNegro);
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) &&
+        (cfg.pruebaPiso == "rampa" || cfg.pruebaPiso == "rampa-fuera")) {
+        // Transición sintética hacia blanco entre 50 y 66 ms, negro desde 120 ms.
+        const double t = tiempoUs / 1000.0;
+        if (t >= 120 && cfg.pruebaPiso == "rampa-fuera") return (int)cfg.adcFuera;
+        const double fraccion = t >= 120 ? 0 : constrain((t - 50) / 16, 0.0, 1.0);
+        return (int)(cfg.adcNegro + fraccion * (cfg.adcBlanco - cfg.adcNegro));
+    }
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "negro")
+        return (int)cfg.adcNegro;
     if (pin == S_PISO_IZQ) return lecturaPiso(cfg.sensorPisoX, cfg.sensorPisoY);
     if (pin == S_PISO_DER) return lecturaPiso(cfg.sensorPisoX, -cfg.sensorPisoY);
     return 0;
@@ -504,7 +545,10 @@ int analogRead(uint8_t pin) {
 
 int digitalRead(uint8_t pin) {
     avanzarTiempo(4);
-    if (pin == Pin_Control_Remoto) return REMOTE_ACTIVE_HIGH ? HIGH : LOW;
+    if (pin == Pin_Control_Remoto) {
+        const bool activo = cfg.stopMs < 0 || tiempoUs < cfg.stopMs * 1000;
+        return activo == REMOTE_ACTIVE_HIGH ? HIGH : LOW;
+    }
     return sensorEnemigo(pin) == ENEMIGO_ACTIVE_HIGH ? HIGH : LOW;
 }
 
@@ -551,6 +595,7 @@ int main(int argc, char** argv) {
         else if (a == "--adc-fuera") cfg.adcFuera = std::atof(v);
         else if (a == "--pared") cfg.radioPared = std::atof(v);
         else if (a == "--sensor-prueba") cfg.pruebaSensores = v;
+        else if (a == "--piso-prueba") cfg.pruebaPiso = v;
         else if (a == "--sensor-x") cfg.sensorPisoX = std::atof(v);
         else if (a == "--inicio-r") cfg.radioInicio = std::atof(v);
         else if (a == "--inicio") cfg.inicio = v;
@@ -560,6 +605,7 @@ int main(int argc, char** argv) {
         else if (a == "--rango") cfg.rangoEnemigo = std::atof(v);
         else if (a == "--vel-enemigo") cfg.velEnemigo = std::atof(v);
         else if (a == "--ruido-piso") cfg.ruidoPiso = std::atof(v);
+        else if (a == "--stop-ms") cfg.stopMs = std::atof(v);
         else if (a == "--loop-us") cfg.sobrecostoLoopUs = std::atof(v);
         else if (a == "--tray") rutaTray = v;
         else { uso(); return 1; }

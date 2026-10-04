@@ -61,10 +61,9 @@ if __name__=='__main__':
     ap=argparse.ArgumentParser();ap.add_argument('--puerto',type=int,default=8765);a=ap.parse_args()
     if a.puerto!=8765:ap.error('El visor y la política de origen usan el puerto 8765')
     simular.BUILD.mkdir(parents=True,exist_ok=True)
-    for nombre,params in [('actual',{}),('giro',{'PATRON_BUSQUEDA':'0'}),('zigzag',{'PATRON_BUSQUEDA':'1'}),('arcos',{'PATRON_BUSQUEDA':'2'})]:
+    from agresivo import parametros_actuales
+    for nombre,params in [('actual',{}),('sin_kalman',{'FILTRO_KALMAN_DIRECCION':'false'}),('solo_p',{'PID_DIRECCION_KI':'0.0f','PID_DIRECCION_KD':'0.0f'})]:
         BINARIOS[nombre]=simular.compilar(params)
-        import re
-        texto=(simular.RAIZ/'include'/'Definiciones.h').read_text()
-        PARAMETROS[nombre]={key:int(params.get(key,re.search(r'^#define\s+'+key+r'\s+(\d+)',texto,re.M)[1])) for key in ['Velocidad_maxima_Ataque','VELOCIDAD_BUSQUEDA','TIEMPO_RETROCESO_MS','Velocidad_estandar','ATAQUE_IMPULSO_MS','ATAQUE_PAUSA_MS','PAUSA_ESCAPE_MS','RETROCESO_MIN_MS','TIEMPO_GIRO_BORDE_FRENTE_MS','TIEMPO_GIRO_BORDE_LADO_MS','PAUSA_RETROCESO_MS','PAUSA_GIRO_MS','VELOCIDAD_CURVA_INTERIOR','VELOCIDAD_ATAQUE_CURVA_INTERIOR']}
+        PARAMETROS[nombre]=parametros_actuales(params)
     print(f'Visor: http://127.0.0.1:{a.puerto}/visor.html',flush=True)
     ThreadingHTTPServer(('127.0.0.1',a.puerto),Handler).serve_forever()

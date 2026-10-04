@@ -31,12 +31,19 @@ def compilar(params: dict, robot_source: Path | None = None) -> Path:
     # la versión anterior mientras se compila y verifica la siguiente.
     archivos = FUENTES + sorted((RAIZ / 'include').glob('*.h')) + [RAIZ / 'simulacion' / 'support' / 'Arduino.h']
     fuentes_clave = ''.join(str(f.relative_to(RAIZ)) + f.read_text() for f in archivos)
-    clave = hashlib.sha1((repr(sorted(params.items())) + fuentes_clave + (robot_source.read_text() if robot_source else "")).encode()).hexdigest()[:10]
+    cabecera = None
+    if robot_source:
+        candidata = robot_source.with_name(robot_source.name.replace('.cpp.txt', '.h.txt'))
+        legacy = RAIZ/'simulacion/referencias/Robot_legacy.h.txt'
+        if candidata != robot_source and candidata.exists(): cabecera = candidata
+        elif robot_source.suffix == '.txt' and legacy.exists(): cabecera = legacy
+    clave = hashlib.sha1((repr(sorted(params.items())) + fuentes_clave + (robot_source.read_text() if robot_source else "") + (cabecera.read_text() if cabecera else "")).encode()).hexdigest()[:10]
     inc = BUILD / f"include_{clave}"
     binario = BUILD / f"sim_{clave}"
     if inc.exists():
         shutil.rmtree(inc)
     shutil.copytree(RAIZ / "include", inc)
+    if cabecera: shutil.copyfile(cabecera, inc/"Robot.h")
 
     ruta = inc / "Definiciones.h"
     texto = ruta.read_text()

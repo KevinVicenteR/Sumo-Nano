@@ -24,8 +24,7 @@ class Robot {
     unsigned long ultimoContacto, ultimoCentral;
     float ultimaMedida;
     unsigned long inicioLateral, inicioBusqueda;
-    bool lateralActivo, dobleFrontalActivo;
-    unsigned long inicioDobleFrontal;
+    bool lateralActivo;
     uint8_t faseBusqueda;
     bool leerRemoto();
     bool pisoIncierto(int valor, int negro, bool valido) const;
