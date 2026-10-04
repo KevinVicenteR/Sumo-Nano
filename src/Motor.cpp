@@ -42,6 +42,9 @@ int Motor::ajustar(int velocidad) const {
 }
 
 void Motor::avanzar(int velocidad) {
+#if REGISTRO_COMBATE
+    orden = ajustar(velocidad);
+#endif
     const uint8_t pin1 = invertido ? HIGH : LOW;
     const uint8_t pin2 = invertido ? LOW : HIGH;
     digitalWrite(pinA1, pin1);
@@ -50,6 +53,9 @@ void Motor::avanzar(int velocidad) {
 }
 
 void Motor::retroceder(int velocidad) {
+#if REGISTRO_COMBATE
+    orden = -ajustar(velocidad);
+#endif
     const uint8_t pin1 = invertido ? LOW : HIGH;
     const uint8_t pin2 = invertido ? HIGH : LOW;
     digitalWrite(pinA1, pin1);
@@ -58,6 +64,9 @@ void Motor::retroceder(int velocidad) {
 }
 
 void Motor::detener() {
+#if REGISTRO_COMBATE
+    orden = 0;
+#endif
 #if FRENO_ACTIVO
     digitalWrite(pinA1, HIGH);
     digitalWrite(pinA2, HIGH);
@@ -99,36 +108,56 @@ void Motores::detener() {
 }
 
 void Motores::derecha(int velocidad) {
+#if INVERTIR_SENTIDO_GIRO
+    motorIzq.retroceder(velocidad);
+    motorDer.avanzar(velocidad);
+#else
     motorIzq.avanzar(velocidad);
     motorDer.retroceder(velocidad);
+#endif
     setLedMovimiento(PatronLed::GIRO_DER);
 }
 
 void Motores::izquierda(int velocidad) {
+#if INVERTIR_SENTIDO_GIRO
+    motorIzq.avanzar(velocidad);
+    motorDer.retroceder(velocidad);
+#else
     motorIzq.retroceder(velocidad);
     motorDer.avanzar(velocidad);
+#endif
     setLedMovimiento(PatronLed::GIRO_IZQ);
 }
 
 void Motores::curvaDerecha(int velocidad) {
-    motorIzq.avanzar(velocidad);
-    motorDer.detener();
+#if INVERTIR_SENTIDO_GIRO
+    motorIzq.detener(); motorDer.avanzar(velocidad);
+#else
+    motorIzq.avanzar(velocidad); motorDer.detener();
+#endif
     setLedMovimiento(PatronLed::GIRO_DER);
 }
 
 void Motores::curvaIzquierda(int velocidad) {
-    motorIzq.detener();
-    motorDer.avanzar(velocidad);
+#if INVERTIR_SENTIDO_GIRO
+    motorIzq.avanzar(velocidad); motorDer.detener();
+#else
+    motorIzq.detener(); motorDer.avanzar(velocidad);
+#endif
     setLedMovimiento(PatronLed::GIRO_IZQ);
 }
 
 // Permite avanzar orientándose hacia un frontal sin girar siempre en el sitio.
 void Motores::diferencial(int velocidadIzq, int velocidadDer) {
+    const bool derecha = velocidadIzq >= velocidadDer;
+#if INVERTIR_SENTIDO_GIRO
+    const int temporal = velocidadIzq; velocidadIzq = velocidadDer; velocidadDer = temporal;
+#endif
     if (velocidadIzq == 0) motorIzq.detener();
     else if (velocidadIzq < 0) motorIzq.retroceder(-velocidadIzq);
     else motorIzq.avanzar(velocidadIzq);
     if (velocidadDer == 0) motorDer.detener();
     else if (velocidadDer < 0) motorDer.retroceder(-velocidadDer);
     else motorDer.avanzar(velocidadDer);
-    setLedMovimiento(velocidadIzq >= velocidadDer ? PatronLed::GIRO_DER : PatronLed::GIRO_IZQ);
+    setLedMovimiento(derecha ? PatronLed::GIRO_DER : PatronLed::GIRO_IZQ);
 }

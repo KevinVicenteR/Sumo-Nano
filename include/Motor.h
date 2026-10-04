@@ -9,12 +9,18 @@ class Motor {
     bool invertido;
     int compensacion;
     int ajustar(int velocidad) const;
+#if REGISTRO_COMBATE
+    int orden = 0;
+#endif
 public:
     Motor(int a1, int a2, int pwm, bool invertir = false, int compensacionPct = 100);
     void iniciar();
     void avanzar(int velocidad);
     void retroceder(int velocidad);
     void detener();
+#if REGISTRO_COMBATE
+    int leerOrden() const { return orden; }
+#endif
 };
 
 class Motores {
@@ -30,6 +36,10 @@ public:
     void izquierda(int velocidad);
     void curvaDerecha(int velocidad);
     void curvaIzquierda(int velocidad);
+#if REGISTRO_COMBATE
+    int ordenCanalA() const { return motorIzq.leerOrden(); }
+    int ordenCanalB() const { return motorDer.leerOrden(); }
+#endif
 };
 
 #endif

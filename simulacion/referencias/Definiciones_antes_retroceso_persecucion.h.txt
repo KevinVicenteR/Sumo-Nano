@@ -40,10 +40,6 @@ const bool REMOTE_ACTIVE_HIGH        = true;
 const unsigned long REMOTO_FILTRO_MS = 5;
 
 // Modo calibración: muestra los sensores por Serial sin mover motores
-#ifndef REGISTRO_COMBATE
-#define REGISTRO_COMBATE 0
-#endif
-
 #ifndef MODO_CALIBRACION
 #define MODO_CALIBRACION 0
 #endif
@@ -57,12 +53,10 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define PREDICCION_BORDE_MS 15
 #define PREDICCION_MUESTREO_MS 2
 #define PREDICCION_CAMBIO_MIN_ADC 50
-#define PREDICCION_MARGEN_ADC 200
+#define PREDICCION_MARGEN_ADC 500
 #define PREDICCION_RETIRADA_MIN_MS 40
 // Margen respecto al negro aprendido: una lectura más extrema es piso incierto.
 #define PISO_NEGRO_TOLERANCIA_ADC 80
-// Fuera del dojo medido con ADC bajo; no inferir salida por subidas de negro.
-#define PISO_FUERA_ADC_ALTO false
 
 // Velocidades (PWM 0-255)
 #define Velocidad_movimiento_seguir 255
@@ -90,7 +84,7 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define VELOCIDAD_BUSQUEDA 255
 #define BUSQUEDA_FLUIDA true
 #define RAMPA_AVANCE_PWM_MS 4
-#define MEMORIA_ATAQUE_MS 600
+#define MEMORIA_ATAQUE_MS 60
 
 // Ataque continuo sin pausas; los tiempos de impulso solo sirven al comparar
 // snapshots anteriores en el simulador.
@@ -121,14 +115,10 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define TIEMPO_BUSQUEDA_AVANCE_MS  80
 #define TIEMPO_REBUSQUEDA_MS       150
 // Recuperación dirigida antes de regresar a búsqueda general.
-#define SEGUIMIENTO_PERDIDA_MS 1200
+#define SEGUIMIENTO_PERDIDA_MS 650
 
-// Potencia reducida fuera del ataque; PID corrige mediante avance/pivote.
-#define MOTORES_MAXIMO_SIEMPRE false
-#define VELOCIDAD_BUSQUEDA_PWM 130
-#define VELOCIDAD_SEGUIMIENTO_PWM 255
-#define VELOCIDAD_RETROCESO_PWM 160
-#define VELOCIDAD_GIRO_PWM 140
+// Control agresivo: PWM 255 en ambos motores, corrección temporal con PID.
+#define MOTORES_MAXIMO_SIEMPRE true
 #define PID_DIRECCION_KP 200.0f
 #define PID_DIRECCION_KI 20.0f
 #define PID_DIRECCION_KD 3.0f
@@ -143,34 +133,17 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define KALMAN_R_CENTRAL 0.05f
 #define KALMAN_R_FRONTAL 0.12f
 #define KALMAN_R_LATERAL 0.35f
-#define ESCAPE_RETROCESO_MIN_MS 240
-#define ESCAPE_RETROCESO_MAX_MS 320
-#define ESCAPE_RETIRADA_ATAQUE_MS 120
-#define ESCAPE_GIRO_MS 300
+#define ESCAPE_RETROCESO_MIN_MS 80
+#define ESCAPE_RETROCESO_MAX_MS 100
+#define ESCAPE_GIRO_MS 200
 #define ESCAPE_GIRO_MIN_MS 0
-#define ESCAPE_GIRO_MAX_MS 500
-#define ESCAPE_REINTENTO_RETROCESO_MIN_MS 100
-#define ESCAPE_REINTENTO_RETROCESO_MAX_MS 150
+#define ESCAPE_GIRO_MAX_MS 350
+#define ESCAPE_REINTENTO_RETROCESO_MIN_MS 20
+#define ESCAPE_REINTENTO_RETROCESO_MAX_MS 20
 #define BORDE_REPETIDO_VENTANA_MS 900
-#define BORDE_REPETIDO_GIRO_MIN_MS 280
-#define BUSQUEDA_CAMBIO_LADO_MS 2100
-#define BUSQUEDA_CICLO_MS 350
-#define BUSQUEDA_ARCO_MS 300
-#define BUSQUEDA_CORRECCION_PWM 510
-#define BUSQUEDA_INTERIOR_PWM 60
-#define RECUPERACION_LATERAL_GIRO_MS 250
-
-// Seleccionar round antes de cargar: 1/2 orientan desde el centro; 3 avanza.
-// 0 desactiva apertura específica y conserva la búsqueda general.
-#ifndef ROUND_COMPETENCIA
-#define ROUND_COMPETENCIA 1
-#endif
-#if ROUND_COMPETENCIA < 0 || ROUND_COMPETENCIA > 3
-#error ROUND_COMPETENCIA debe estar entre 0 y 3
-#endif
-#define APERTURA_ORIENTACION_MS 900
-#define APERTURA_FRENTE_MS 300
-#define APERTURA_ORIENTACION_PWM 140
-#define APERTURA_FRENTE_PWM 180
+#define BORDE_REPETIDO_GIRO_MIN_MS 200
+#define BUSQUEDA_CICLO_MS 220
+#define BUSQUEDA_ARCO_MS 200
+#define BUSQUEDA_CORRECCION_PWM 380
 
 #endif // DEFINICIONES_H

@@ -17,7 +17,8 @@ def generar(base=None):
     if base is None:
         seguro=RAIZ/'resultados/seguridad/lotes'
         agresivo=RAIZ/'resultados/agresivo/lotes'
-        base=agresivo if agresivo.exists() else seguro if seguro.exists() else RAIZ/'resultados/laterales/lotes'
+        seguimiento=RAIZ/'resultados/seguimiento/lotes'
+        base=seguimiento if seguimiento.exists() else agresivo if agresivo.exists() else seguro if seguro.exists() else RAIZ/'resultados/laterales/lotes'
     carpetas=sorted(base.glob('*'),key=lambda p:(p.name!='todo',p.name))
     for carpeta in carpetas:
         if not (carpeta/'meta.json').exists():continue

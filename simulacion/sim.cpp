@@ -67,10 +67,16 @@ struct Config {
     std::string pruebaPiso = "normal";
     double rangoEnemigo = 0.40;   // m, alcance de los sensores de enemigo
     // Enemigo
+    bool rivalFijo = false;
+    double rivalX = 0, rivalY = 0, rivalTheta = 0;
     double radioEnemigo = 0.05;   // m
     double velEnemigo = 0.25;     // m/s en modo errante
     // Simulación
-    double duracion = 30.0;       // s de combate (tras los 5 s reglamentarios)
+    // Configuración física independiente del firmware: giro contrario reportado.
+    bool canalesIntercambiados = true;
+    bool invertirCanalA = false, invertirCanalB = true;
+    double pasoTray = 0.01;       // s entre muestras de telemetría
+    double duracion = 30.0;       // s desde RUN; sin demora reglamentaria añadida
     double ruidoPiso = 15.0;      // desviación estándar del ADC
     double stopMs = -1;          // STOP sintético, desactivado por defecto
     double sobrecostoLoopUs = 20; // µs de loop() además de las lecturas
@@ -185,8 +191,31 @@ bool rayoVe(double rx, double ry, double ang) {
 }
 
 bool sensorEnemigo(uint8_t pin) {
+    if (cfg.pruebaSensores == "seguimiento-movil") {
+        if (tiempoUs < 80000) return pin == S_FRONT_CEN;
+        if (tiempoUs < 140000) return pin == S_FRONT_DER;
+        if (tiempoUs < 200000) return pin == S_FRONT_CEN;
+        if (tiempoUs < 260000) return pin == S_FRONT_IZQ;
+        if (tiempoUs < 380000) return false;
+        if (tiempoUs < 460000) return pin == S_FRONT_IZQ;
+        return pin == S_FRONT_CEN;
+    }
+    if (cfg.pruebaSensores == "derecha-central-perdida") {
+        if (tiempoUs < 100000) return pin == S_FRONT_DER;
+        return tiempoUs < 160000 && pin == S_FRONT_CEN;
+    }
     if (cfg.pruebaSensores == "central-intermitente")
         return pin == S_FRONT_CEN && (static_cast<unsigned long>(tiempoUs / 20000) % 3) < 2;
+    if (cfg.pruebaSensores == "lateral-a-tres-frontales")
+        return tiempoUs < 100000 ? pin == S_LAT_DER : (pin == S_FRONT_IZQ || pin == S_FRONT_CEN || pin == S_FRONT_DER);
+    if (cfg.pruebaSensores == "lateral-central-perdida")
+        return tiempoUs < 100000 ? pin == S_LAT_DER : (tiempoUs < 160000 && pin == S_FRONT_CEN);
+    if (cfg.pruebaSensores == "lateral-derecho-breve")
+        return tiempoUs < 100000 && pin == S_LAT_DER;
+    if (cfg.pruebaSensores == "empuje-senal-perdida")
+        return pin == S_FRONT_CEN && (tiempoUs < 100000 || tiempoUs >= 500000);
+    if (cfg.pruebaSensores == "empuje-lateral-transitorio")
+        return tiempoUs < 100000 ? pin == S_FRONT_CEN : (tiempoUs < 500000 ? pin == S_LAT_DER : pin == S_FRONT_CEN);
     if (cfg.pruebaSensores == "frontales-dobles")
         return pin == S_FRONT_IZQ || pin == S_FRONT_DER;
     if (cfg.pruebaSensores == "frontal-a-central")
@@ -230,7 +259,7 @@ bool sensorEnemigo(uint8_t pin) {
 int comandoMotor(uint8_t in1, uint8_t in2, uint8_t pwm) {
     const int magnitud = pwmPin[pwm];
     if (nivelPin[in1] == nivelPin[in2]) return 0;  // freno / libre
-    const bool invertido = pwm == PWMA ? INVERTIR_MOTOR_IZQUIERDO : INVERTIR_MOTOR_DERECHO;
+    const bool invertido = pwm == PWMA ? cfg.invertirCanalA : cfg.invertirCanalB;
     const int signo = nivelPin[in1] == HIGH ? -1 : 1;
     return magnitud * signo * (invertido ? -1 : 1);
 }
@@ -258,13 +287,20 @@ double fuerzaRueda(int comando, double vRueda, bool circuitoCerrado) {
     return constrain(f, -adherencia, adherencia);
 }
 
+int comandoIzquierdo() {
+    return cfg.canalesIntercambiados ? comandoMotor(MA1B,MA2B,PWMB) : comandoMotor(MA1A,MA2A,PWMA);
+}
+int comandoDerecho() {
+    return cfg.canalesIntercambiados ? comandoMotor(MA1A,MA2A,PWMA) : comandoMotor(MA1B,MA2B,PWMB);
+}
+
 // Cuerpo rígido: avance v y giro w con rodadura y roce lateral al girar
 void avanzarCuerpoDC(int cmdIzq, int cmdDer, double dt) {
     const double b = cfg.trocha / 2;
     double v = (rob.vl + rob.vr) / 2;
     double w = (rob.vr - rob.vl) / cfg.trocha;
-    const double fi = fuerzaRueda(cmdIzq, rob.vl, pwmPin[PWMA] > 0);
-    const double fd = fuerzaRueda(cmdDer, rob.vr, pwmPin[PWMB] > 0);
+    const double fi = fuerzaRueda(cmdIzq, rob.vl, pwmPin[cfg.canalesIntercambiados ? PWMB : PWMA] > 0);
+    const double fd = fuerzaRueda(cmdDer, rob.vr, pwmPin[cfg.canalesIntercambiados ? PWMA : PWMB] > 0);
     const double peso = cfg.masa * 9.81;
     const double inercia = cfg.masa * (cfg.largo * cfg.largo + cfg.ancho * cfg.ancho) / 12;
     const double fuerza = conFriccion(fi + fd, v, cfg.rodadura * peso);
@@ -290,10 +326,10 @@ void avanzarRobot(double dt) {
     if (caidaFisica) return;
     const double xAntes = rob.x, yAntes = rob.y;
     if (cfg.rpm > 0) {
-        avanzarCuerpoDC(comandoMotor(MA1A, MA2A, PWMA), comandoMotor(MA1B, MA2B, PWMB), dt);
+        avanzarCuerpoDC(comandoIzquierdo(), comandoDerecho(), dt);
     } else {
-        avanzarRueda(rob.vl, comandoMotor(MA1A, MA2A, PWMA), dt);
-        avanzarRueda(rob.vr, comandoMotor(MA1B, MA2B, PWMB), dt);
+        avanzarRueda(rob.vl, comandoIzquierdo(), dt);
+        avanzarRueda(rob.vr, comandoDerecho(), dt);
     }
     const double v = (rob.vl + rob.vr) / 2;
     const double w = (rob.vr - rob.vl) / cfg.trocha;
@@ -302,12 +338,12 @@ void avanzarRobot(double dt) {
     rob.th += w * dt;
     velocidadPico = std::max(velocidadPico, std::fabs(v));
     if (trayectoriaActual && tiempoUs >= inicioTrayUs + proximaTray * 1e6) {
-        proximaTray += 0.01;
+        proximaTray += cfg.pasoTray;
         const bool linea = sobreBlanco(cfg.sensorPisoX, cfg.sensorPisoY) || sobreBlanco(cfg.sensorPisoX, -cfg.sensorPisoY);
         std::fprintf(trayectoriaActual, "%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d,%d\n",
                      (tiempoUs - inicioTrayUs) / 1e6, rob.x, rob.y, rob.th,
                      ene.presente ? ene.x : 0., ene.presente ? ene.y : 0.,
-                     comandoMotor(MA1A, MA2A, PWMA), comandoMotor(MA1B, MA2B, PWMB), linea ? 1 : 0, estadoSim);
+                     comandoIzquierdo(), comandoDerecho(), linea ? 1 : 0, estadoSim);
     }
 
     const double margen = cfg.radio - std::hypot(rob.x, rob.y);
@@ -447,7 +483,7 @@ Resultado correr(int semilla, FILE* trayectoria) {
     if (ene.presente) {
         const double r = std::sqrt(aleatorio(0, 1)) * (cfg.radio - 0.06);
         const double a = aleatorio(-PI, PI);
-        ene = {true, r * std::cos(a), r * std::sin(a), aleatorio(-PI, PI)};
+        ene = cfg.rivalFijo ? Enemigo{true,cfg.rivalX,cfg.rivalY,cfg.rivalTheta * PI / 180} : Enemigo{true,r * std::cos(a),r * std::sin(a),aleatorio(-PI,PI)};
     }
 
     enSetup = true;
@@ -495,7 +531,7 @@ Resultado correr(int semilla, FILE* trayectoria) {
         const bool linea = sobreBlanco(cfg.sensorPisoX, cfg.sensorPisoY) || sobreBlanco(cfg.sensorPisoX, -cfg.sensorPisoY);
         std::fprintf(trayectoria, "%.3f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d,%d,%d\n",
             (tiempoUs - inicioUs) / 1e6, rob.x, rob.y, rob.th, ene.presente ? ene.x : 0., ene.presente ? ene.y : 0.,
-            comandoMotor(MA1A, MA2A, PWMA), comandoMotor(MA1B, MA2B, PWMB), linea ? 1 : 0, estadoSim);
+            comandoIzquierdo(), comandoDerecho(), linea ? 1 : 0, estadoSim);
     }
     return res;
 }
@@ -524,6 +560,12 @@ unsigned long micros(void) { avanzarTiempo(4); return (unsigned long)tiempoUs; }
 
 int analogRead(uint8_t pin) {
     avanzarTiempo(112);  // conversión ADC con prescaler 128 a 16 MHz
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "negro-con-ruido")
+        return (int)(720 + 190 * ((unsigned long)(tiempoUs / 2000) % 2));
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "borde-persistente")
+        return (int)(tiempoUs < 900000 ? cfg.adcBlanco : cfg.adcNegro);
+    if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "escape-repetido-largo")
+        return (int)(((tiempoUs < 50000) || (tiempoUs >= 400000 && tiempoUs < 450000)) ? cfg.adcBlanco : cfg.adcNegro);
     if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "escape-repetido")
         return (int)(((tiempoUs < 50000) || (tiempoUs >= 200000 && tiempoUs < 250000)) ? cfg.adcBlanco : cfg.adcNegro);
     if ((pin == S_PISO_IZQ || pin == S_PISO_DER) && cfg.pruebaPiso == "escape")
@@ -601,12 +643,19 @@ int main(int argc, char** argv) {
         else if (a == "--inicio") cfg.inicio = v;
         else if (a == "--x") cfg.inicioX = std::atof(v);
         else if (a == "--y") cfg.inicioY = std::atof(v);
+        else if (a == "--rival-x") { cfg.rivalX = std::atof(v); cfg.rivalFijo = true; }
+        else if (a == "--rival-y") { cfg.rivalY = std::atof(v); cfg.rivalFijo = true; }
+        else if (a == "--rival-theta") { cfg.rivalTheta = std::atof(v); cfg.rivalFijo = true; }
         else if (a == "--theta") cfg.inicioTh = std::atof(v);
         else if (a == "--rango") cfg.rangoEnemigo = std::atof(v);
         else if (a == "--vel-enemigo") cfg.velEnemigo = std::atof(v);
         else if (a == "--ruido-piso") cfg.ruidoPiso = std::atof(v);
         else if (a == "--stop-ms") cfg.stopMs = std::atof(v);
         else if (a == "--loop-us") cfg.sobrecostoLoopUs = std::atof(v);
+        else if (a == "--canales-intercambiados") cfg.canalesIntercambiados = std::string(v) == "true";
+        else if (a == "--invertir-canal-a") cfg.invertirCanalA = std::string(v) == "true";
+        else if (a == "--invertir-canal-b") cfg.invertirCanalB = std::string(v) == "true";
+        else if (a == "--tray-ms") cfg.pasoTray = std::max(0.0001, std::atof(v)/1000.0);
         else if (a == "--tray") rutaTray = v;
         else { uso(); return 1; }
         i++;

@@ -1,6 +1,6 @@
 # Ataque directo a PWM 255
 
-El controlador mantiene PWM 255 en ambos motores durante movimiento. STOP y calibración los detienen. El firmware nuevo se compiló localmente; no se cargó automáticamente al robot.
+El controlador mantiene PWM 255 en ambos motores durante movimiento. STOP y calibración los detienen. El firmware de combate con el mapa central/derecho corregido se cargó en el robot y se verificó con avrdude, tras autorización explícita del usuario.
 
 ## Corrección tras el video de 12:19:58
 
@@ -58,3 +58,7 @@ Comando: `python3 simulacion/agresivo.py --n 60`. Combates de 30 s; 14 escenario
 **533 caídas en 3.492 corridas, frente a 414 de la versión anterior a este cambio. No se alcanzó cero caídas.** El cambio da prioridad al avance recto confirmado y aumenta las caídas en varios escenarios; no se presenta como una mejora de seguridad. Los lotes incluyen batería alta y adherencia baja, donde el ataque a PWM 255 sigue fallando mucho. El resultado histórico de cero caídas corresponde a menor potencia.
 
 Las filas `antes_*` ejecutan el firmware recibido antes de PID/Kalman con sus velocidades originales inferiores; no son una comparación de algoritmos a potencia igual. El estado «Ataca» significa que se ordenó ataque, no que se produjo un empuje: el enemigo del modelo es cinemático y no se simulan colisiones ni victorias.
+
+## Diagnóstico físico posterior
+
+Se identificó y corrigió un intercambio de pines mediante mediciones Serial con posiciones confirmadas por el usuario: el frontal central está conectado a A3 y el derecho a A4. Con el rival centrado, el mapa anterior lo interpretaba como derecho (64/64 muestras); después de corregirlo, se interpreta como central (54/54). Se conserva polaridad activa HIGH y el umbral de piso. Véase [CALIBRACION_REAL.md](CALIBRACION_REAL.md). Estos datos son del robot físico; los lotes de simulación anteriores no detectaban el intercambio porque el modelo asigna cada sensor por su función lógica. No se afirma una reducción medida de caídas físicas por este cambio.
