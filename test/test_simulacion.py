@@ -79,7 +79,7 @@ class SimulacionTest(unittest.TestCase):
         self.assertTrue(all(r[9]==4 and r[6:8]==[255,255] for r in filas if r[0]>.48))
 
     def test_calibracion_de_giro_corrige_modelo_fisico_sin_invertir_avance(self):
-        anterior=simular.compilar({'INVERTIR_SENTIDO_GIRO':'false'})
+        anterior=simular.compilar({'INVERTIR_SENTIDO_GIRO':'false','ROUND_COMPETENCIA':'0'})
         extra=['--piso-prueba','negro','--sensor-prueba','lateral-derecho']
         mal=self.traza(extra,anterior,dur='.1')
         bien=self.traza(extra,dur='.1')
@@ -171,7 +171,7 @@ class SimulacionTest(unittest.TestCase):
         self.assertTrue(all(r[9]!=0 for r in f if r[0]>.01))
         self.assertTrue(any(r[6]>0 and r[7]>0 for r in f if r[0]>.01))
 
-    def test_aperturas_por_round_y_corte_inmediato_por_enemigo(self):
+    def test_aperturas_por_round_y_corte_por_enemigo(self):
         for ronda,orden in [(1,[140,0]),(2,[0,140]),(3,[180,180])]:
             b=simular.compilar({'ROUND_COMPETENCIA':str(ronda)})
             f=self.traza(['--piso-prueba','negro','--rpm','30'],b,dur='.12')
@@ -179,8 +179,10 @@ class SimulacionTest(unittest.TestCase):
             f=self.traza(['--piso-prueba','negro','--rpm','30'],b,dur='1.1')
             fin=.32 if ronda==3 else .92
             self.assertTrue(all(r[9] in (1,2) and r[6]>=0 and r[7]>=0 for r in f if r[0]>fin),ronda)
-            f=self.traza(['--piso-prueba','negro','--sensor-prueba','escape-frontal-retroceso'],b,dur='.12')
-            self.assertTrue(all(r[9]==4 and r[6:8]==[255,255] for r in f if r[0]>.01),ronda)
+            f=self.traza(['--piso-prueba','negro','--sensor-prueba','escape-frontal-retroceso'],b,dur='.8')
+            corte=.01 if ronda==3 else .71
+            if ronda!=3: self.assertTrue(all(r[6:8]==orden for r in f if .01<r[0]<.69),ronda)
+            self.assertTrue(all(r[9]==4 and r[6:8]==[255,255] for r in f if r[0]>corte),ronda)
             f=self.traza(['--piso-prueba','escape','--stop-ms','30'],b,dur='.12')
             self.assertTrue(any(r[9]==5 for r in f if r[0]<.03),ronda)
             self.assertTrue(all(r[9]==0 for r in f if r[0]>.04),ronda)

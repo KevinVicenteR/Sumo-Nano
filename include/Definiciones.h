@@ -160,7 +160,8 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define BUSQUEDA_INTERIOR_PWM 60
 #define RECUPERACION_LATERAL_GIRO_MS 250
 
-// Seleccionar round antes de cargar: 1/2 orientan desde el centro; 3 avanza.
+// Round inicial al encender: 1/2 orientan desde el centro; 3 avanza.
+// Cada STOP pasa al siguiente round (1->2->3->1); apagar reinicia al inicial.
 // 0 desactiva apertura específica y conserva la búsqueda general.
 #ifndef ROUND_COMPETENCIA
 #define ROUND_COMPETENCIA 1
@@ -168,7 +169,12 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #if ROUND_COMPETENCIA < 0 || ROUND_COMPETENCIA > 3
 #error ROUND_COMPETENCIA debe estar entre 0 y 3
 #endif
+#ifndef ROUND_ROTATIVO
+#define ROUND_ROTATIVO true
+#endif
 #define APERTURA_ORIENTACION_MS 900
+// Rounds 1/2: los sensores de enemigo no interrumpen el giro inicial en este tiempo.
+#define APERTURA_COMPROMISO_MS 700
 #define APERTURA_FRENTE_MS 300
 #define APERTURA_ORIENTACION_PWM 140
 #define APERTURA_FRENTE_PWM 180

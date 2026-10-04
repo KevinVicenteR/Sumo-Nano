@@ -15,6 +15,7 @@ class Robot {
     enum class Escape : uint8_t { LIBRE, RETROCESO, GIRO };
     Escape escape;
     bool aperturaActiva;
+    uint8_t roundActual;
     unsigned long inicioApertura;
     bool actualizarApertura(unsigned long ahora);
     bool estadoAnterior, remotoEstable;
