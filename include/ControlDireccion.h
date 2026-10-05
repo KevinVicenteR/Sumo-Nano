@@ -4,7 +4,6 @@
 #include <math.h>
 #include "Definiciones.h"
 
-// Estado angular aproximado, estimado exclusivamente con sensores de enemigo.
 class ControlDireccion {
     float estimacion, covarianza, integral, derivada;
     unsigned long ultimaActualizacion;
@@ -44,7 +43,6 @@ public:
         derivada += dt / (PID_DERIVADA_TAU_S + dt) * ((estimacion - previa) / dt - derivada);
         const float candidata = constrain(integral + estimacion * dt, -PID_INTEGRAL_LIMITE, PID_INTEGRAL_LIMITE);
         const float provisional = PID_DIRECCION_KP * estimacion + PID_DIRECCION_KI * candidata + PID_DIRECCION_KD * derivada;
-        // Anti-windup: aceptar integración solo sin saturación o al salir de ella.
         if (fabsf(provisional) < 510 || provisional * estimacion < 0) integral = candidata;
         const float control = PID_DIRECCION_KP * estimacion + PID_DIRECCION_KI * integral + PID_DIRECCION_KD * derivada;
         salida = (int)constrain(control, -510.0f, 510.0f);

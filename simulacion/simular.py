@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Compila el firmware con el Arduino simulado y ejecuta lotes de combates.
+"""Compila el firmware con un Arduino simulado y ejecuta lotes de combates.
 
 Ejemplos:
-  python3 simulacion/simular.py                       # resumen de los 3 escenarios
-  python3 simulacion/simular.py --vmax 1.2 --n 300
-  python3 simulacion/simular.py --param TiempoRetroceso=150 --param VelocidadAvance=120
-  python3 simulacion/simular.py --tray simulacion/salida  # guarda trayectorias de ejemplo
+  python3 simulacion/simular.py
+  python3 simulacion/simular.py --n 300 --param ROUND_COMPETENCIA=1
+  python3 simulacion/simular.py --param VELOCIDAD_GIRO_PWM=180 --mu 0.5
+  python3 simulacion/simular.py --tray simulacion/resultados/salida
 """
 
 import argparse
 import csv
 import hashlib
 import io
+import os
 import re
 import shutil
 import statistics
@@ -25,26 +26,17 @@ FUENTES = sorted((RAIZ / "src").glob("*.cpp")) + [RAIZ / "simulacion" / "sim.cpp
 MODOS = ["ninguno", "estatico", "errante"]
 
 
-def compilar(params: dict, robot_source: Path | None = None) -> Path:
-    """Copia include/ aplicando los cambios a Definiciones.h y compila."""
-    # Cada firmware conserva su ejecutable; el servidor puede seguir usando
-    # la versión anterior mientras se compila y verifica la siguiente.
-    archivos = FUENTES + sorted((RAIZ / 'include').glob('*.h')) + [RAIZ / 'simulacion' / 'support' / 'Arduino.h']
-    fuentes_clave = ''.join(str(f.relative_to(RAIZ)) + f.read_text() for f in archivos)
-    cabecera = None
-    if robot_source:
-        candidata = robot_source.with_name(robot_source.name.replace('.cpp.txt', '.h.txt'))
-        legacy = RAIZ/'simulacion/referencias/Robot_legacy.h.txt'
-        if candidata != robot_source and candidata.exists(): cabecera = candidata
-        elif robot_source.suffix == '.txt' and legacy.exists(): cabecera = legacy
-    clave = hashlib.sha1((repr(sorted(params.items())) + fuentes_clave + (robot_source.read_text() if robot_source else "") + (cabecera.read_text() if cabecera else "")).encode()).hexdigest()[:10]
+def compilar(params: dict) -> Path:
+    archivos = FUENTES + sorted((RAIZ / "include").glob("*.h")) + [RAIZ / "simulacion" / "support" / "Arduino.h"]
+    fuentes = "".join(str(f.relative_to(RAIZ)) + f.read_text() for f in archivos)
+    clave = hashlib.sha1((repr(sorted(params.items())) + fuentes).encode()).hexdigest()[:10]
     inc = BUILD / f"include_{clave}"
     binario = BUILD / f"sim_{clave}"
+    if binario.exists():
+        return binario
     if inc.exists():
         shutil.rmtree(inc)
     shutil.copytree(RAIZ / "include", inc)
-    if cabecera: shutil.copyfile(cabecera, inc/"Robot.h")
-
     ruta = inc / "Definiciones.h"
     texto = ruta.read_text()
     for nombre, valor in params.items():
@@ -52,16 +44,11 @@ def compilar(params: dict, robot_source: Path | None = None) -> Path:
         if n == 0:
             sys.exit(f"Parámetro desconocido: {nombre}")
     ruta.write_text(texto)
-
-    fuentes = FUENTES
-    if robot_source:
-        copia = BUILD / f"Robot_{clave}.cpp"
-        copia.write_text(robot_source.read_text())
-        fuentes = [copia if f == RAIZ / "src" / "Robot.cpp" else f for f in FUENTES]
-    cmd = ["c++", "-std=c++17", "-O2", "-w", "-DSIMULACION",
-           f"-I{inc}", f"-I{RAIZ / 'simulacion' / 'support'}",
-           *map(str, fuentes), "-o", str(binario)]
+    temporal = binario.with_name(binario.name + f".{os.getpid()}.tmp")
+    cmd = ["c++", "-std=c++17", "-O2", "-w", "-DSIMULACION", f"-I{inc}", f"-I{RAIZ / 'simulacion' / 'support'}",
+           *map(str, FUENTES), "-o", str(temporal)]
     subprocess.run(cmd, check=True)
+    temporal.replace(binario)
     return binario
 
 
@@ -129,7 +116,6 @@ def main():
     binario = compilar(params)
     extra = ["--dur", str(a.dur), "--vmax", str(a.vmax), "--mu", str(a.mu),
              "--tau", str(a.tau), "--rango", str(a.rango)]
-    # Opciones de realismo (--bateria, --pared, --adc-*, --friccion-*...) pasan tal cual al simulador
     extra += [x for o in otros for x in o.split("=", 1)]
     if a.rpm > 0:
         extra += ["--rpm", str(a.rpm), "--diam", str(a.diam), "--masa", str(a.masa), "--par", str(a.par)]

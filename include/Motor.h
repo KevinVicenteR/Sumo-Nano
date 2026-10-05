@@ -34,8 +34,6 @@ public:
     void detener();
     void derecha(int velocidad);
     void izquierda(int velocidad);
-    void curvaDerecha(int velocidad);
-    void curvaIzquierda(int velocidad);
 #if REGISTRO_COMBATE
     int ordenCanalA() const { return motorIzq.leerOrden(); }
     int ordenCanalB() const { return motorDer.leerOrden(); }

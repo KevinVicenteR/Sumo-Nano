@@ -2,14 +2,13 @@
 #define SENSORENEMIGO_H
 
 #include <Arduino.h>
-#include "ISensor.h"
 #include "Definiciones.h"
 
-class SensorEnemigo : public ISensor {
+class SensorEnemigo {
     int pin;
 public:
-    SensorEnemigo(int pin);
-    bool detectar() override;
+    explicit SensorEnemigo(int pin);
+    bool detectar() const;
 };
 
-#endif // SENSORENEMIGO_H
+#endif

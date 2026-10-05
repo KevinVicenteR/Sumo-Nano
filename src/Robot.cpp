@@ -5,26 +5,21 @@
 #endif
 #ifdef SIMULACION
 extern void registrarEstadoSim(int estado);
-#define REGISTRAR_SIM(estado) registrarEstadoSim(estado)
-#else
-#define REGISTRAR_SIM(estado) ((void)0)
-#endif
-
-#if REGISTRO_COMBATE
-#define ESTADO_SIM(estado) do { estadoRegistro = (estado); REGISTRAR_SIM(estado); } while (0)
-#else
-#define ESTADO_SIM(estado) REGISTRAR_SIM(estado)
 #endif
 
 Robot::Robot() : motores(), sensorPisoIzq(S_PISO_IZQ, BLANCO), sensorPisoDer(S_PISO_DER, BLANCO),
     sensorFrontal(S_FRONT_CEN), sensorFrontalIzq(S_FRONT_IZQ), sensorFrontalDer(S_FRONT_DER),
-    sensorLateralIzq(S_LAT_IZQ), sensorLateralDer(S_LAT_DER), direccion(), escape(Escape::LIBRE),
-    aperturaActiva(false), roundActual(ROUND_COMPETENCIA), aperturaDerecha(true), aperturaDecidida(false), inicioApertura(0), estadoAnterior(false), remotoEstable(false), remotoCambioDesde(0), inicioEscape(0), libreDesde(0), ultimoEscape(0),
-    pisoLibreEstable(false), giroEscapeDerecha(true), giroAlternadoDerecha(true), escapePrevio(false), reorientacionObligatoria(false),
-    pisoPrevioIzq(0), pisoPrevioDer(0), negroIzq(0), negroDer(0), pisoPrevioValido(false),
-    negroIzqValido(false), negroDerValido(false), ultimaMuestraPiso(0), huboContacto(false),
-    busquedaDerecha(true), centralReciente(false), ultimoContacto(0), ultimoCentral(0),
-    ultimaMedida(0), ultimoErrorLateral(0), inicioLateral(0), inicioBusqueda(0), lateralActivo(false), dobleFrontalActivo(false), inicioDobleFrontal(0), faseBusqueda(0), reintentosEscape(0) {}
+    sensorLateralIzq(S_LAT_IZQ), sensorLateralDer(S_LAT_DER), direccion(),
+    roundActual(ROUND_COMPETENCIA), aperturaActiva(false), aperturaDerecha(true), aperturaDecidida(false), inicioApertura(0),
+    estadoAnterior(false), remotoEstable(false), remotoCambioDesde(0),
+    escape(Escape::LIBRE), inicioEscape(0), libreDesde(0), ultimoEscape(0),
+    pisoLibreEstable(false), giroEscapeDerecha(true), giroAlternadoDerecha(true), escapePrevio(false),
+    reorientacionObligatoria(false), reintentosEscape(0),
+    pisoPrevioIzq(0), pisoPrevioDer(0), negroIzq(0), negroDer(0),
+    pisoPrevioValido(false), negroIzqValido(false), negroDerValido(false), ultimaMuestraPiso(0),
+    huboContacto(false), busquedaDerecha(true), centralReciente(false), dobleFrontalActivo(false),
+    ultimoContacto(0), ultimoCentral(0), inicioBusqueda(0), inicioDobleFrontal(0),
+    ultimaMedida(0), ultimoErrorLateral(0) {}
 
 void Robot::setup() {
     const uint8_t sensores[] = {S_PISO_IZQ,S_PISO_DER,S_FRONT_DER,S_FRONT_CEN,S_FRONT_IZQ,S_LAT_IZQ,S_LAT_DER};
@@ -38,8 +33,25 @@ void Robot::setup() {
 #endif
 }
 
+void Robot::loop() {
+    procesarLoop();
+#if REGISTRO_COMBATE
+    registrarCombate();
+#endif
+}
+
+void Robot::marcarEstado(uint8_t estado) {
+#if REGISTRO_COMBATE
+    estadoRegistro = estado;
+#endif
+#ifdef SIMULACION
+    registrarEstadoSim(estado);
+#endif
+    (void)estado;
+}
+
 bool Robot::leerRemoto() {
-    const bool crudo = REMOTE_ACTIVE_HIGH ? digitalRead(Pin_Control_Remoto) == HIGH : digitalRead(Pin_Control_Remoto) == LOW;
+    const bool crudo = digitalRead(Pin_Control_Remoto) == (REMOTE_ACTIVE_HIGH ? HIGH : LOW);
     const unsigned long ahora = millis();
     if (crudo == remotoEstable) remotoCambioDesde = ahora;
     else if (ahora - remotoCambioDesde >= REMOTO_FILTRO_MS) remotoEstable = crudo;
@@ -51,12 +63,9 @@ void Robot::reiniciarEstado() {
     escape = Escape::LIBRE;
     escapePrevio = reorientacionObligatoria = false;
     pisoPrevioValido = negroIzqValido = negroDerValido = false;
-    huboContacto = centralReciente = lateralActivo = pisoLibreEstable = false;
-    dobleFrontalActivo = false;
+    huboContacto = centralReciente = pisoLibreEstable = dobleFrontalActivo = false;
     ultimoErrorLateral = 0;
-    faseBusqueda = 0;
-    inicioBusqueda = millis();
-    inicioApertura = inicioBusqueda;
+    inicioBusqueda = inicioApertura = millis();
     aperturaActiva = roundActual != 0;
     aperturaDerecha = roundActual == 1;
     aperturaDecidida = roundActual != 2;
@@ -96,18 +105,16 @@ void Robot::predecirBorde(int izquierda, int derecha, unsigned long ahora, bool 
 void Robot::iniciarEscape(bool izquierda, bool derecha, unsigned long ahora) {
     aperturaActiva = false;
     reorientacionObligatoria = escapePrevio && ahora - ultimoEscape < BORDE_REPETIDO_VENTANA_MS;
-    ultimoEscape = ahora;
+    ultimoEscape = inicioEscape = ahora;
     escapePrevio = true;
     escape = Escape::RETROCESO;
     reintentosEscape = 0;
-    inicioEscape = ahora;
     pisoLibreEstable = false;
     if (izquierda && derecha) {
         giroEscapeDerecha = giroAlternadoDerecha;
         giroAlternadoDerecha = !giroAlternadoDerecha;
     } else giroEscapeDerecha = izquierda;
-    centralReciente = lateralActivo = dobleFrontalActivo = false;
-    huboContacto = false;
+    centralReciente = dobleFrontalActivo = huboContacto = false;
     ultimoErrorLateral = 0;
     direccion.reiniciar();
 }
@@ -118,10 +125,7 @@ bool Robot::actualizarEscape(bool peligroIzq, bool peligroDer, bool enemigo, uns
     if (peligro) pisoLibreEstable = false;
     else if (!pisoLibreEstable) { pisoLibreEstable = true; libreDesde = ahora; }
     const bool libre = pisoLibreEstable && ahora - libreDesde >= PISO_LIBRE_MS;
-    // El frontal cancela la maniobra en cuanto el piso queda libre;
-    // no esperar el giro obligatorio si ya podemos recuperar al rival.
-    if (enemigo && libre && (escape != Escape::RETROCESO ||
-        ahora - inicioEscape >= ESCAPE_RETIRADA_ATAQUE_MS)) {
+    if (enemigo && libre && (escape != Escape::RETROCESO || ahora - inicioEscape >= ESCAPE_RETIRADA_ATAQUE_MS)) {
         escape = Escape::LIBRE;
         pisoPrevioValido = false;
         direccion.reiniciar();
@@ -140,34 +144,27 @@ bool Robot::actualizarEscape(bool peligroIzq, bool peligroDer, bool enemigo, uns
             return true;
         }
     }
-    if (escape == Escape::GIRO) {
-        const unsigned long tiempo = ahora - inicioEscape;
-        const unsigned long minimo = reorientacionObligatoria ? BORDE_REPETIDO_GIRO_MIN_MS : ESCAPE_GIRO_MIN_MS;
-        const bool orientado = tiempo >= minimo;
-        if (libre && orientado && (enemigo || ahora - inicioEscape >= ESCAPE_GIRO_MS)) {
-            escape = Escape::LIBRE;
-            pisoPrevioValido = false;
-            direccion.reiniciar();
-            inicioBusqueda = ahora;
-            return false;
-        }
-        // Si pivotar no libera el piso, retirar de nuevo brevemente y cambiar
-        // la orientación. Ninguna fase queda girando indefinidamente.
-        if (peligro && tiempo >= ESCAPE_GIRO_MAX_MS) {
-            if (peligroIzq != peligroDer) giroEscapeDerecha = peligroIzq;
-            else giroEscapeDerecha = !giroEscapeDerecha;
-            if (reintentosEscape < 255) ++reintentosEscape;
-            escape = Escape::RETROCESO;
-            inicioEscape = ahora;
-            reorientacionObligatoria = true;
-            retroceder();
-            return true;
-        }
-        if (giroEscapeDerecha) moverDerecha(); else moverIzquierda();
-        ESTADO_SIM(6);
+    const unsigned long tiempo = ahora - inicioEscape;
+    const unsigned long minimo = reorientacionObligatoria ? BORDE_REPETIDO_GIRO_MIN_MS : ESCAPE_GIRO_MIN_MS;
+    if (libre && tiempo >= minimo && (enemigo || tiempo >= ESCAPE_GIRO_MS)) {
+        escape = Escape::LIBRE;
+        pisoPrevioValido = false;
+        direccion.reiniciar();
+        inicioBusqueda = ahora;
+        return false;
+    }
+    if (peligro && tiempo >= ESCAPE_GIRO_MAX_MS) {
+        giroEscapeDerecha = peligroIzq != peligroDer ? peligroIzq : !giroEscapeDerecha;
+        if (reintentosEscape < 255) ++reintentosEscape;
+        escape = Escape::RETROCESO;
+        inicioEscape = ahora;
+        reorientacionObligatoria = true;
+        retroceder();
         return true;
     }
-    return false;
+    girar(giroEscapeDerecha);
+    marcarEstado(6);
+    return true;
 }
 
 bool Robot::actualizarApertura(unsigned long ahora) {
@@ -181,52 +178,46 @@ bool Robot::actualizarApertura(unsigned long ahora) {
     }
     if (roundActual == 3) {
         motores.adelante(APERTURA_FRENTE_PWM);
-        ESTADO_SIM(13);
+        marcarEstado(13);
     } else {
-        // Curva cerrada: orientar sin hacer retroceder ninguna rueda.
         const int pwm = roundActual == 1 ? APERTURA_R1_PWM : APERTURA_R2_PWM;
         if (aperturaDerecha) motores.diferencial(pwm,0);
         else motores.diferencial(0,pwm);
-        ESTADO_SIM(12);
+        marcarEstado(12);
     }
     return true;
 }
 
-void Robot::ordenarDireccion(int correccion, unsigned long ahora, int velocidad) {
+void Robot::ordenarDireccion(int correccion, unsigned long ahora) {
     correccion = constrain(correccion, -510, 510);
-#if MOTORES_MAXIMO_SIEMPRE
-    velocidad = 255;
-#endif
     const unsigned long fase = ahora % DIRECCION_PERIODO_MS;
     const int magnitud = abs(correccion) < PID_ZONA_MUERTA ? 0 : abs(correccion);
     const bool pivote = fase * 510UL < (unsigned long)magnitud * DIRECCION_PERIODO_MS;
-    if (!pivote) motores.adelante(velocidad);
-    else if (correccion > 0) motores.derecha(velocidad);
-    else motores.izquierda(velocidad);
+    if (!pivote) motores.adelante(VELOCIDAD_SEGUIMIENTO_PWM);
+    else if (correccion > 0) motores.derecha(VELOCIDAD_SEGUIMIENTO_PWM);
+    else motores.izquierda(VELOCIDAD_SEGUIMIENTO_PWM);
 }
 
-void Robot::seguirMedida(float medida, float ruido, unsigned long ahora, int estado) {
-    const int control = direccion.actualizar(medida, ruido, ahora);
-    ordenarDireccion(control, ahora);
-    ESTADO_SIM(estado);
+void Robot::seguirMedida(float medida, float ruido, unsigned long ahora) {
+    ordenarDireccion(direccion.actualizar(medida, ruido, ahora), ahora);
+    marcarEstado(3);
 }
 
-void Robot::ataqueEnemigo() { direccion.reiniciar(); motores.adelante(255); ESTADO_SIM(4); }
-void Robot::moverAdelante() { motores.adelante(VELOCIDAD_BUSQUEDA_PWM); }
-void Robot::retroceder() { motores.retroceder(VELOCIDAD_RETROCESO_PWM); ESTADO_SIM(5); }
-void Robot::moverDerecha() { motores.derecha(VELOCIDAD_GIRO_PWM); }
-void Robot::moverIzquierda() { motores.izquierda(VELOCIDAD_GIRO_PWM); }
-void Robot::detenerse() { motores.detener(); }
-void Robot::sensoresPiso(bool izquierda, bool derecha) { iniciarEscape(izquierda,derecha,millis()); }
-void Robot::sensoresPiso(bool izquierda, bool derecha, bool) { sensoresPiso(izquierda,derecha); }
-void Robot::sensoresFrontales(bool derecho, bool izquierdo) {
-    seguirMedida(derecho == izquierdo ? 0 : derecho ? 0.8f : -0.8f, KALMAN_R_FRONTAL, millis(), 3);
+void Robot::atacar() { direccion.reiniciar(); motores.adelante(255); marcarEstado(4); }
+void Robot::retroceder() { motores.retroceder(VELOCIDAD_RETROCESO_PWM); marcarEstado(5); }
+void Robot::girar(bool derecha) {
+    if (derecha) motores.derecha(VELOCIDAD_GIRO_PWM);
+    else motores.izquierda(VELOCIDAD_GIRO_PWM);
 }
-void Robot::sensoresLaterales(bool izquierdo, bool derecho) {
-    // Un lateral necesita orientación; mezclar avance aquí describe una órbita.
-    if (izquierdo == derecho ? busquedaDerecha : derecho) moverDerecha();
-    else moverIzquierda();
-    ESTADO_SIM(11);
+
+void Robot::buscar(unsigned long ahora) {
+    const unsigned long buscando = ahora - inicioBusqueda;
+    const unsigned long fase = buscando % BUSQUEDA_CICLO_MS;
+    const bool derecha = busquedaDerecha != ((buscando / BUSQUEDA_CAMBIO_LADO_MS) % 2 != 0);
+    if (fase >= BUSQUEDA_ARCO_MS) motores.adelante(VELOCIDAD_BUSQUEDA_PWM);
+    else if (derecha) motores.diferencial(VELOCIDAD_BUSQUEDA_PWM,BUSQUEDA_INTERIOR_PWM);
+    else motores.diferencial(BUSQUEDA_INTERIOR_PWM,VELOCIDAD_BUSQUEDA_PWM);
+    marcarEstado(fase < BUSQUEDA_ARCO_MS ? 1 : 2);
 }
 
 #if MODO_CALIBRACION
@@ -240,25 +231,15 @@ void Robot::calibrar() {
     Serial.print(F(" | Frente I/C/D:")); Serial.print(sensorFrontalIzq.detectar());
     Serial.print(sensorFrontal.detectar()); Serial.print(sensorFrontalDer.detectar());
     Serial.print(F(" | Laterales I/D:")); Serial.print(sensorLateralIzq.detectar()); Serial.print(sensorLateralDer.detectar());
-    Serial.print(F(" | RAW FI/FC/FD/LI/LD:"));
-    const uint8_t pines[] = {S_FRONT_IZQ,S_FRONT_CEN,S_FRONT_DER,S_LAT_IZQ,S_LAT_DER};
-    for (uint8_t i = 0; i < 5; ++i) Serial.print(digitalRead(pines[i]));
-    Serial.println();
+    Serial.print(F(" | Remoto:")); Serial.print(digitalRead(Pin_Control_Remoto));
+    Serial.print(F(" | Round:")); Serial.println(roundActual);
 }
 #endif
-
-void Robot::loop() {
-    procesarLoop();
-#if REGISTRO_COMBATE
-    registrarCombate();
-#endif
-}
 
 #if REGISTRO_COMBATE
 void Robot::registrarCombate() {
     const unsigned long ahora = millis();
     if (ahora - ultimoRegistro < 20) return;
-    // Enviar una fila solo si cabe completa: no esperar a que vacie Serial.
     char fila[64];
     const int largo = snprintf(fila,sizeof(fila),"%lu,%d,%d,%u,%u,%u,%d,%d,%u,%u\n",
         ahora,pisoRegistroIzq,pisoRegistroDer,sensoresRegistro,estadoRegistro,
@@ -276,25 +257,23 @@ void Robot::procesarLoop() {
     return;
 #endif
 #if REGISTRO_COMBATE
-    // Tras carga/reset, exigir STOP antes de permitir RUN.
     if (!registroArmado) {
-        const bool run = REMOTE_ACTIVE_HIGH ? digitalRead(Pin_Control_Remoto) == HIGH : digitalRead(Pin_Control_Remoto) == LOW;
-        if (!run) registroArmado = true;
+        if (digitalRead(Pin_Control_Remoto) != (REMOTE_ACTIVE_HIGH ? HIGH : LOW)) registroArmado = true;
         motores.detener();
-        ESTADO_SIM(0);
+        marcarEstado(0);
         estadoAnterior = false;
         return;
     }
 #endif
     if (!leerRemoto()) {
         motores.detener();
-        ESTADO_SIM(0);
-        // Flanco RUN->STOP: el siguiente arranque usa la apertura del próximo round.
+        marcarEstado(0);
         if (estadoAnterior && ROUND_ROTATIVO && roundActual != 0) roundActual = roundActual % 3 + 1;
         estadoAnterior = false;
         return;
     }
     if (!estadoAnterior) { reiniciarEstado(); estadoAnterior = true; }
+
     const int valorIzq = sensorPisoIzq.leerValor(), valorDer = sensorPisoDer.leerValor();
     const bool blancoIzq = sensorPisoIzq.esBlanco(valorIzq) || pisoIncierto(valorIzq,negroIzq,negroIzqValido);
     const bool blancoDer = sensorPisoDer.esBlanco(valorDer) || pisoIncierto(valorDer,negroDer,negroDerValido);
@@ -305,99 +284,83 @@ void Robot::procesarLoop() {
     sensoresRegistro = (frenteIzq ? 16 : 0) | (central ? 8 : 0) | (frenteDer ? 4 : 0) |
         (lateralIzq ? 2 : 0) | (lateralDer ? 1 : 0);
 #endif
-    const bool enemigo = central || frenteIzq || frenteDer || lateralIzq || lateralDer;
+    const bool frontal = central || frenteIzq || frenteDer;
+    const bool enemigo = frontal || lateralIzq || lateralDer;
     const unsigned long ahora = millis();
-    bool riesgoIzq,riesgoDer;
+
+    bool riesgoIzq, riesgoDer;
     predecirBorde(valorIzq,valorDer,ahora,riesgoIzq,riesgoDer);
     if (escape == Escape::LIBRE && (blancoIzq || blancoDer || riesgoIzq || riesgoDer))
         iniciarEscape(blancoIzq || riesgoIzq,blancoDer || riesgoDer,ahora);
-    if (actualizarEscape(blancoIzq,blancoDer,central || frenteIzq || frenteDer,ahora)) return;
+    if (actualizarEscape(blancoIzq,blancoDer,frontal,ahora)) return;
 
-    // Giro de espaldas comprometido: una detección temprana (público, reflejos,
-    // rival pegado) no debe convertir la apertura en un ataque recto.
-    // Round 2: el primer lateral que vea al rival fija el lado del giro.
     if (aperturaActiva && !aperturaDecidida && lateralIzq != lateralDer) {
         aperturaDerecha = lateralDer;
         aperturaDecidida = true;
     }
     if (aperturaActiva && roundActual != 3 && ahora - inicioApertura < APERTURA_COMPROMISO_MS &&
         actualizarApertura(ahora)) return;
+
     if (enemigo) {
         aperturaActiva = false;
         huboContacto = true;
         ultimoContacto = ahora;
         inicioBusqueda = ahora + SEGUIMIENTO_PERDIDA_MS;
         if (central) {
-            centralReciente = true; ultimoCentral = ahora;
+            centralReciente = true;
+            ultimoCentral = ahora;
             if (!frenteIzq && !frenteDer && fabsf(ultimoErrorLateral) > 1) ultimoErrorLateral = 0;
         }
-        // Actualizar el último lado solo con evidencia inequívoca; el central
-        // no borra esa referencia y los laterales no pisan un frontal activo.
         if (frenteDer != frenteIzq) ultimoErrorLateral = frenteDer ? 0.8f : -0.8f;
-        else if (!central && !frenteIzq && !frenteDer && lateralDer != lateralIzq)
-            ultimoErrorLateral = lateralDer ? 2.0f : -2.0f;
+        else if (!frontal && lateralDer != lateralIzq) ultimoErrorLateral = lateralDer ? 2.0f : -2.0f;
         if (ultimoErrorLateral != 0) busquedaDerecha = ultimoErrorLateral > 0;
     }
-    // Evitar confirmar ambos frontales por leerlos a lados de una transición.
+
     if (!(frenteIzq && frenteDer)) dobleFrontalActivo = false;
     else if (!dobleFrontalActivo) { dobleFrontalActivo = true; inicioDobleFrontal = ahora; }
     const bool frenteConfirmado = central || (ATAQUE_DOBLE_FRONTAL && dobleFrontalActivo &&
         ahora - inicioDobleFrontal >= DOBLE_FRONTAL_CONFIRMACION_MS);
-    const bool memoriaRecta = centralReciente && ahora - ultimoCentral < MEMORIA_ATAQUE_MS &&
-        !frenteIzq && !frenteDer;
-    // Tres frontales = rival ancho y alineado; ignorar sesgo y estado del PID.
+    const bool memoriaRecta = centralReciente && ahora - ultimoCentral < MEMORIA_ATAQUE_MS && !frenteIzq && !frenteDer;
+
     if (central && frenteIzq && frenteDer) {
-        lateralActivo = false;
         ultimoErrorLateral = ultimaMedida = 0;
-        ataqueEnemigo();
+        atacar();
         return;
     }
     if (frenteConfirmado || memoriaRecta) {
-        lateralActivo = false;
         if (frenteConfirmado) { centralReciente = true; ultimoCentral = ahora; }
         if (central && frenteDer != frenteIzq) {
-            // Seguir el desplazamiento del rival incluso dentro del campo central.
             if (fabsf(ultimaMedida) > PID_ERROR_CENTRAL_LATERAL) direccion.reiniciar();
             ultimaMedida = frenteDer ? PID_ERROR_CENTRAL_LATERAL : -PID_ERROR_CENTRAL_LATERAL;
-            seguirMedida(ultimaMedida,KALMAN_R_CENTRAL,ahora,3);
+            seguirMedida(ultimaMedida,KALMAN_R_CENTRAL,ahora);
         } else {
             ultimaMedida = 0;
-            ataqueEnemigo();
+            atacar();
         }
         return;
     }
     if (frenteIzq || frenteDer) {
-        lateralActivo = false;
         ultimaMedida = frenteDer == frenteIzq ? 0 : frenteDer ? 0.8f : -0.8f;
-        seguirMedida(ultimaMedida,KALMAN_R_FRONTAL,ahora,3);
+        seguirMedida(ultimaMedida,KALMAN_R_FRONTAL,ahora);
         return;
     }
     if (lateralIzq || lateralDer) {
-        lateralActivo = true;
-        ultimaMedida = lateralDer == lateralIzq ? (busquedaDerecha ? 2.0f : -2.0f) : lateralDer ? 2.0f : -2.0f;
-        sensoresLaterales(lateralIzq,lateralDer);
+        const bool derecha = lateralIzq == lateralDer ? busquedaDerecha : lateralDer;
+        ultimaMedida = derecha ? 2.0f : -2.0f;
+        girar(derecha);
+        marcarEstado(11);
         return;
     }
-    lateralActivo = false;
     if (huboContacto && ahora - ultimoContacto < SEGUIMIENTO_PERDIDA_MS) {
         if (fabsf(ultimoErrorLateral) > 1 && ahora - ultimoContacto < RECUPERACION_LATERAL_GIRO_MS) {
-            sensoresLaterales(ultimoErrorLateral < 0,ultimoErrorLateral > 0);
+            girar(ultimoErrorLateral > 0);
+            marcarEstado(11);
         } else {
             const float medida = ultimoErrorLateral != 0 ? constrain(ultimoErrorLateral,-0.8f,0.8f) : (busquedaDerecha ? 0.8f : -0.8f);
-            seguirMedida(medida,KALMAN_R_FRONTAL,ahora,3);
+            seguirMedida(medida,KALMAN_R_FRONTAL,ahora);
         }
         return;
     }
     if (actualizarApertura(ahora)) return;
-    const unsigned long buscando = ahora - inicioBusqueda;
-    const unsigned long fase = buscando % BUSQUEDA_CICLO_MS;
-    // Barrer ambos lados y avanzar entre arcos en vez de orbitar siempre
-    // hacia el mismo lado. Una detección interrumpe la búsqueda en este ciclo.
-    const bool derecha = busquedaDerecha != ((buscando / BUSQUEDA_CAMBIO_LADO_MS) % 2 != 0);
-    // Búsqueda solo hacia adelante: la rueda interior gira más lenta,
-    // ninguna invierte sentido. Retroceso reservado a la evasión del piso.
-    if (fase >= BUSQUEDA_ARCO_MS) motores.adelante(VELOCIDAD_BUSQUEDA_PWM);
-    else if (derecha) motores.diferencial(VELOCIDAD_BUSQUEDA_PWM,BUSQUEDA_INTERIOR_PWM);
-    else motores.diferencial(BUSQUEDA_INTERIOR_PWM,VELOCIDAD_BUSQUEDA_PWM);
-    ESTADO_SIM(fase < BUSQUEDA_ARCO_MS ? 1 : 2);
+    buscar(ahora);
 }

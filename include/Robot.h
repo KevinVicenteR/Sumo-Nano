@@ -8,31 +8,33 @@
 #include "ControlDireccion.h"
 
 class Robot {
+    enum class Escape : uint8_t { LIBRE, RETROCESO, GIRO };
+
     Motores motores;
     SensorPiso sensorPisoIzq, sensorPisoDer;
     SensorEnemigo sensorFrontal, sensorFrontalIzq, sensorFrontalDer, sensorLateralIzq, sensorLateralDer;
     ControlDireccion direccion;
-    enum class Escape : uint8_t { LIBRE, RETROCESO, GIRO };
-    Escape escape;
-    bool aperturaActiva;
+
     uint8_t roundActual;
-    bool aperturaDerecha, aperturaDecidida;
+    bool aperturaActiva, aperturaDerecha, aperturaDecidida;
     unsigned long inicioApertura;
-    bool actualizarApertura(unsigned long ahora);
+
     bool estadoAnterior, remotoEstable;
-    unsigned long remotoCambioDesde, inicioEscape, libreDesde, ultimoEscape;
+    unsigned long remotoCambioDesde;
+
+    Escape escape;
+    unsigned long inicioEscape, libreDesde, ultimoEscape;
     bool pisoLibreEstable, giroEscapeDerecha, giroAlternadoDerecha, escapePrevio, reorientacionObligatoria;
+    uint8_t reintentosEscape;
+
     int pisoPrevioIzq, pisoPrevioDer, negroIzq, negroDer;
     bool pisoPrevioValido, negroIzqValido, negroDerValido;
     unsigned long ultimaMuestraPiso;
-    bool huboContacto, busquedaDerecha, centralReciente;
-    unsigned long ultimoContacto, ultimoCentral;
+
+    bool huboContacto, busquedaDerecha, centralReciente, dobleFrontalActivo;
+    unsigned long ultimoContacto, ultimoCentral, inicioBusqueda, inicioDobleFrontal;
     float ultimaMedida, ultimoErrorLateral;
-    unsigned long inicioLateral, inicioBusqueda;
-    bool lateralActivo, dobleFrontalActivo;
-    unsigned long inicioDobleFrontal;
-    uint8_t faseBusqueda, reintentosEscape;
-    void procesarLoop();
+
 #if REGISTRO_COMBATE
     bool registroArmado = false;
     unsigned long ultimoRegistro = 0;
@@ -40,30 +42,29 @@ class Robot {
     uint8_t sensoresRegistro = 0, estadoRegistro = 0;
     void registrarCombate();
 #endif
-    bool leerRemoto();
-    bool pisoIncierto(int valor, int negro, bool valido) const;
-    void predecirBorde(int izquierda, int derecha, unsigned long ahora, bool &riesgoIzq, bool &riesgoDer);
-    void reiniciarEstado();
-    void iniciarEscape(bool izquierda, bool derecha, unsigned long ahora);
-    bool actualizarEscape(bool peligroIzq, bool peligroDer, bool enemigo, unsigned long ahora);
-    void ordenarDireccion(int correccion, unsigned long ahora, int velocidad = VELOCIDAD_SEGUIMIENTO_PWM);
-    void seguirMedida(float medida, float ruido, unsigned long ahora, int estado);
 #if MODO_CALIBRACION
     void calibrar();
 #endif
+
+    void marcarEstado(uint8_t estado);
+    bool leerRemoto();
+    void reiniciarEstado();
+    bool pisoIncierto(int valor, int negro, bool valido) const;
+    void predecirBorde(int izquierda, int derecha, unsigned long ahora, bool &riesgoIzq, bool &riesgoDer);
+    void iniciarEscape(bool izquierda, bool derecha, unsigned long ahora);
+    bool actualizarEscape(bool peligroIzq, bool peligroDer, bool enemigo, unsigned long ahora);
+    bool actualizarApertura(unsigned long ahora);
+    void ordenarDireccion(int correccion, unsigned long ahora);
+    void seguirMedida(float medida, float ruido, unsigned long ahora);
+    void atacar();
+    void retroceder();
+    void girar(bool derecha);
+    void buscar(unsigned long ahora);
+    void procesarLoop();
+
 public:
     Robot();
     void setup();
     void loop();
-    void detenerse();
-    void ataqueEnemigo();
-    void moverAdelante();
-    void retroceder();
-    void moverDerecha();
-    void moverIzquierda();
-    void sensoresPiso(bool izquierda, bool derecha);
-    void sensoresPiso(bool izquierda, bool derecha, bool anticipado);
-    void sensoresFrontales(bool derecho, bool izquierdo);
-    void sensoresLaterales(bool izquierdo, bool derecho);
 };
 #endif

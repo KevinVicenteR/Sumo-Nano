@@ -2,17 +2,15 @@
 #define SENSORPISO_H
 
 #include <Arduino.h>
-#include "ISensor.h"
 #include "Definiciones.h"
 
-class SensorPiso : public ISensor {
+class SensorPiso {
     int pin;
     int umbral;
 public:
     SensorPiso(int pin, int umbral);
-    int leerValor();
+    int leerValor() const;
     bool esBlanco(int valor) const;
-    bool detectar() override;
 };
 
-#endif // SENSORPISO_H
+#endif

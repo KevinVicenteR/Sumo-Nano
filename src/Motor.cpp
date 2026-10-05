@@ -25,7 +25,7 @@ void setLedMovimiento(PatronLed patron) {
     }
     digitalWrite(LED_BUILTIN, ((millis() / periodo) % 2) ? HIGH : LOW);
 }
-} // namespace
+}
 
 Motor::Motor(int a1, int a2, int pwm, bool invertir, int compensacionPct)
     : pinA1(a1), pinA2(a2), pinPWM(pwm), invertido(invertir), compensacion(compensacionPct) {}
@@ -78,7 +78,6 @@ void Motor::detener() {
 #endif
 }
 
-// Motores
 Motores::Motores() :
     motorIzq(MA1A, MA2A, PWMA, INVERTIR_MOTOR_IZQUIERDO, COMPENSACION_MOTOR_IZQ),
     motorDer(MA1B, MA2B, PWMB, INVERTIR_MOTOR_DERECHO, COMPENSACION_MOTOR_DER) {}
@@ -129,25 +128,6 @@ void Motores::izquierda(int velocidad) {
     setLedMovimiento(PatronLed::GIRO_IZQ);
 }
 
-void Motores::curvaDerecha(int velocidad) {
-#if INVERTIR_SENTIDO_GIRO
-    motorIzq.detener(); motorDer.avanzar(velocidad);
-#else
-    motorIzq.avanzar(velocidad); motorDer.detener();
-#endif
-    setLedMovimiento(PatronLed::GIRO_DER);
-}
-
-void Motores::curvaIzquierda(int velocidad) {
-#if INVERTIR_SENTIDO_GIRO
-    motorIzq.avanzar(velocidad); motorDer.detener();
-#else
-    motorIzq.detener(); motorDer.avanzar(velocidad);
-#endif
-    setLedMovimiento(PatronLed::GIRO_IZQ);
-}
-
-// Permite avanzar orientándose hacia un frontal sin girar siempre en el sitio.
 void Motores::diferencial(int velocidadIzq, int velocidadDer) {
     const bool derecha = velocidadIzq >= velocidadDer;
 #if INVERTIR_SENTIDO_GIRO
