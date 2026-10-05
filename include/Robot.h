@@ -16,6 +16,7 @@ class Robot {
     Escape escape;
     bool aperturaActiva;
     uint8_t roundActual;
+    bool aperturaDerecha, aperturaDecidida;
     unsigned long inicioApertura;
     bool actualizarApertura(unsigned long ahora);
     bool estadoAnterior, remotoEstable;

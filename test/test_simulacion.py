@@ -172,20 +172,26 @@ class SimulacionTest(unittest.TestCase):
         self.assertTrue(any(r[6]>0 and r[7]>0 for r in f if r[0]>.01))
 
     def test_aperturas_por_round_y_corte_por_enemigo(self):
-        for ronda,orden in [(1,[140,0]),(2,[0,140]),(3,[180,180])]:
+        for ronda,orden in [(1,[200,0]),(2,[0,200]),(3,[180,180])]:
             b=simular.compilar({'ROUND_COMPETENCIA':str(ronda)})
             f=self.traza(['--piso-prueba','negro','--rpm','30'],b,dur='.12')
             self.assertTrue(all(r[6:8]==orden for r in f if r[0]>.01),ronda)
             f=self.traza(['--piso-prueba','negro','--rpm','30'],b,dur='1.1')
-            fin=.32 if ronda==3 else .92
+            fin=.32 if ronda==3 else .65
             self.assertTrue(all(r[9] in (1,2) and r[6]>=0 and r[7]>=0 for r in f if r[0]>fin),ronda)
             f=self.traza(['--piso-prueba','negro','--sensor-prueba','escape-frontal-retroceso'],b,dur='.8')
-            corte=.01 if ronda==3 else .71
-            if ronda!=3: self.assertTrue(all(r[6:8]==orden for r in f if .01<r[0]<.69),ronda)
+            corte=.01 if ronda==3 else .64
+            if ronda!=3: self.assertTrue(all(r[6:8]==orden for r in f if .01<r[0]<.62),ronda)
             self.assertTrue(all(r[9]==4 and r[6:8]==[255,255] for r in f if r[0]>corte),ronda)
             f=self.traza(['--piso-prueba','escape','--stop-ms','30'],b,dur='.12')
             self.assertTrue(any(r[9]==5 for r in f if r[0]<.03),ronda)
             self.assertTrue(all(r[9]==0 for r in f if r[0]>.04),ronda)
+
+    def test_round2_gira_hacia_el_lateral_que_ve_al_rival(self):
+        b=simular.compilar({'ROUND_COMPETENCIA':'2'})
+        for sensor,orden in [('lateral-derecho',[200,0]),('lateral-izquierdo',[0,200])]:
+            f=self.traza(['--piso-prueba','negro','--sensor-prueba',sensor],b,dur='.5')
+            self.assertTrue(all(r[6:8]==orden for r in f if .01<r[0]<.6),sensor)
 
     def test_variaciones_de_negro_no_interrumpen_ataque(self):
         f=self.traza(['--piso-prueba','negro-con-ruido','--sensor-prueba','escape-frontal-retroceso','--rpm','100'],dur='.8')

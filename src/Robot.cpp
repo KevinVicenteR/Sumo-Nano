@@ -19,7 +19,7 @@ extern void registrarEstadoSim(int estado);
 Robot::Robot() : motores(), sensorPisoIzq(S_PISO_IZQ, BLANCO), sensorPisoDer(S_PISO_DER, BLANCO),
     sensorFrontal(S_FRONT_CEN), sensorFrontalIzq(S_FRONT_IZQ), sensorFrontalDer(S_FRONT_DER),
     sensorLateralIzq(S_LAT_IZQ), sensorLateralDer(S_LAT_DER), direccion(), escape(Escape::LIBRE),
-    aperturaActiva(false), roundActual(ROUND_COMPETENCIA), inicioApertura(0), estadoAnterior(false), remotoEstable(false), remotoCambioDesde(0), inicioEscape(0), libreDesde(0), ultimoEscape(0),
+    aperturaActiva(false), roundActual(ROUND_COMPETENCIA), aperturaDerecha(true), aperturaDecidida(false), inicioApertura(0), estadoAnterior(false), remotoEstable(false), remotoCambioDesde(0), inicioEscape(0), libreDesde(0), ultimoEscape(0),
     pisoLibreEstable(false), giroEscapeDerecha(true), giroAlternadoDerecha(true), escapePrevio(false), reorientacionObligatoria(false),
     pisoPrevioIzq(0), pisoPrevioDer(0), negroIzq(0), negroDer(0), pisoPrevioValido(false),
     negroIzqValido(false), negroDerValido(false), ultimaMuestraPiso(0), huboContacto(false),
@@ -58,6 +58,8 @@ void Robot::reiniciarEstado() {
     inicioBusqueda = millis();
     inicioApertura = inicioBusqueda;
     aperturaActiva = roundActual != 0;
+    aperturaDerecha = roundActual == 1;
+    aperturaDecidida = roundActual != 2;
 }
 
 bool Robot::pisoIncierto(int valor, int negro, bool valido) const {
@@ -170,7 +172,8 @@ bool Robot::actualizarEscape(bool peligroIzq, bool peligroDer, bool enemigo, uns
 
 bool Robot::actualizarApertura(unsigned long ahora) {
     if (!aperturaActiva) return false;
-    const unsigned long duracion = roundActual == 3 ? APERTURA_FRENTE_MS : APERTURA_ORIENTACION_MS;
+    const unsigned long duracion = roundActual == 3 ? APERTURA_FRENTE_MS :
+        roundActual == 1 ? APERTURA_R1_MS : APERTURA_R2_MS;
     if (ahora - inicioApertura >= duracion) {
         aperturaActiva = false;
         inicioBusqueda = ahora;
@@ -181,8 +184,9 @@ bool Robot::actualizarApertura(unsigned long ahora) {
         ESTADO_SIM(13);
     } else {
         // Curva cerrada: orientar sin hacer retroceder ninguna rueda.
-        if (roundActual == 1) motores.diferencial(APERTURA_ORIENTACION_PWM,0);
-        else motores.diferencial(0,APERTURA_ORIENTACION_PWM);
+        const int pwm = roundActual == 1 ? APERTURA_R1_PWM : APERTURA_R2_PWM;
+        if (aperturaDerecha) motores.diferencial(pwm,0);
+        else motores.diferencial(0,pwm);
         ESTADO_SIM(12);
     }
     return true;
@@ -311,6 +315,11 @@ void Robot::procesarLoop() {
 
     // Giro de espaldas comprometido: una detección temprana (público, reflejos,
     // rival pegado) no debe convertir la apertura en un ataque recto.
+    // Round 2: el primer lateral que vea al rival fija el lado del giro.
+    if (aperturaActiva && !aperturaDecidida && lateralIzq != lateralDer) {
+        aperturaDerecha = lateralDer;
+        aperturaDecidida = true;
+    }
     if (aperturaActiva && roundActual != 3 && ahora - inicioApertura < APERTURA_COMPROMISO_MS &&
         actualizarApertura(ahora)) return;
     if (enemigo) {

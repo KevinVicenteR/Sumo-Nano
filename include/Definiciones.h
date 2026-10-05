@@ -177,6 +177,12 @@ const unsigned long REMOTO_FILTRO_MS = 5;
 #define APERTURA_COMPROMISO_MS 700
 #define APERTURA_FRENTE_MS 300
 #define APERTURA_ORIENTACION_PWM 140
+// Round 1 gira más rápido; duración escalada para conservar el ángulo (900*140/200).
+#define APERTURA_R1_PWM 200
+#define APERTURA_R1_MS 630
+// Round 2: gira hacia el lateral que vea al rival (izquierda si ninguno), igual de rápido.
+#define APERTURA_R2_PWM 200
+#define APERTURA_R2_MS 630
 #define APERTURA_FRENTE_PWM 180
 
 #endif // DEFINICIONES_H
